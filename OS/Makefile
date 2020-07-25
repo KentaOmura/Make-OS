@@ -1,5 +1,5 @@
 OBJS_BOOTPACK = bootpack.obj naskfunc.obj hankaku.obj graphic.obj dsctbl.obj \
-		int.obj fifo.obj
+				int.obj fifo.obj
 
 TOOLPATH = ../z_tools/
 INCPATH  = ../z_tools/haribote/
@@ -31,6 +31,18 @@ ipl10.bin : ipl10.nas Makefile
 asmhead.bin : asmhead.nas Makefile
 	$(NASK) asmhead.nas asmhead.bin asmhead.lst
 
+bootpack.gas : bootpack.c Makefile
+	$(CC1) -o bootpack.gas bootpack.c
+
+bootpack.nas : bootpack.gas Makefile
+	$(GAS2NASK) bootpack.gas bootpack.nas
+
+bootpack.obj : bootpack.nas Makefile
+	$(NASK) bootpack.nas bootpack.obj bootpack.lst
+
+naskfunc.obj : naskfunc.nas Makefile
+	$(NASK) naskfunc.nas naskfunc.obj naskfunc.lst
+
 hankaku.bin : hankaku.txt Makefile
 	$(MAKEFONT) hankaku.txt hankaku.bin
 
@@ -56,7 +68,7 @@ haribote.img : ipl10.bin haribote.sys Makefile
 
 # ˆê”Ê‹K‘¥
 
-%.gas : %.c bootpack.h Makefile
+%.gas : %.c Makefile
 	$(CC1) -o $*.gas $*.c
 
 %.nas : %.gas Makefile
@@ -82,7 +94,9 @@ install :
 clean :
 	-$(DEL) *.bin
 	-$(DEL) *.lst
+	-$(DEL) *.gas
 	-$(DEL) *.obj
+	-$(DEL) bootpack.nas
 	-$(DEL) bootpack.map
 	-$(DEL) bootpack.bim
 	-$(DEL) bootpack.hrb

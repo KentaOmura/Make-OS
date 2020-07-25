@@ -1,63 +1,82 @@
-/* 割り込み関係 */
-
 #include "bootpack.h"
-#include <stdio.h>
+
+static struct FIFO gkeyboard;
+static struct FIFO gmouse;
 
 void init_pic(void)
-/* PICの初期化 */
 {
-	io_out8(PIC0_IMR,  0xff  ); /* 全ての割り込みを受け付けない */
-	io_out8(PIC1_IMR,  0xff  ); /* 全ての割り込みを受け付けない */
-
-	io_out8(PIC0_ICW1, 0x11  ); /* エッジトリガモード */
-	io_out8(PIC0_ICW2, 0x20  ); /* IRQ0-7は、INT20-27で受ける */
-	io_out8(PIC0_ICW3, 1 << 2); /* PIC1はIRQ2にて接続 */
-	io_out8(PIC0_ICW4, 0x01  ); /* ノンバッファモード */
-
-	io_out8(PIC1_ICW1, 0x11  ); /* エッジトリガモード */
-	io_out8(PIC1_ICW2, 0x28  ); /* IRQ8-15は、INT28-2fで受ける */
-	io_out8(PIC1_ICW3, 2     ); /* PIC1はIRQ2にて接続 */
-	io_out8(PIC1_ICW4, 0x01  ); /* ノンバッファモード */
-
-	io_out8(PIC0_IMR,  0xfb  ); /* 11111011 PIC1以外は全て禁止 */
-	io_out8(PIC1_IMR,  0xff  ); /* 11111111 全ての割り込みを受け付けない */
-
+	/* マスターとスレーブの割り込みを受け付けなくする */
+	io_out8(PIC0_IMR, 0xff);
+	io_out8(PIC1_IMR, 0xff);
+	
+	io_out8(PIC0_ICW1, 0x11); /* ハード基盤の設定 */
+	io_out8(PIC0_ICW2, 0x20); /* IRQ0-7は、INT20-27で受けとるように設定する */
+	io_out8(PIC0_ICW3, 1 << 2);  /* マスタに対してスレーブがどこに繋がっているか */
+	io_out8(PIC0_ICW4, 0x01); /* ハード基盤の設定 */
+	
+	io_out8(PIC1_ICW1, 0x11); /* ハード基盤の設定 */
+	io_out8(PIC1_ICW2, 0x28); /* IRQ8-15は、INT28-2fで受けとるように設定する */
+	io_out8(PIC1_ICW3, 2);  /* スレーブがマスタの何番目に繋がっているか */
+	io_out8(PIC1_ICW4, 0x01); /* ハード基盤の設定 */
+	
+	io_out8(PIC0_IMR, 0xfb); /* 0x11111011 PIC1以外は割り込み禁止 */
+	io_out8(PIC1_IMR, 0xff); /* 0x11111111 全ての割り込みを禁止 */
+	
 	return;
 }
 
-#define PORT_KEYDAT		0x0060
+/* キーボードとマウスのキューを初期化する */
+void ini_keybuf(void)
+{
+	init_fifo(&gkeyboard);
+	init_fifo(&gmouse);
+}
 
-struct FIFO8 keyfifo;
+/* キーボードのデータ数 */
+unsigned int keybord_data_num(void)
+{
+	return fifo_status(&gkeyboard);
+}
 
-void inthandler21(int *esp)
+/* マウスのデータ数 */
+unsigned int mouse_data_num(void)
+{
+	return fifo_status(&gmouse);
+}
+
+unsigned char get_keybord_data(void)
+{
+	return fifo_get(&gkeyboard);
+}
+
+unsigned char get_mouse_data(void)
+{
+	return fifo_get(&gmouse);
+}
+
+
+/* キーボードはIRQ1に繋がっている。その為、INT 0x21が送られる */
+void inthandler21(void)
 {
 	unsigned char data;
-	io_out8(PIC0_OCW2, 0x61);	/* IRQ-01受付完了をPICに通知 */
-	data = io_in8(PORT_KEYDAT);
-	fifo8_put(&keyfifo, data);
-	return;
+	data = io_in8(0x0060); /* 格納されているデータを取ってあげないと、次のデータを格納する事ができない。 */
+	io_out8(PIC0_OCW2, 0x61);
+	fifo_put(&gkeyboard,data);
+	return;	
 }
 
-struct FIFO8 mousefifo;
-
-void inthandler2c(int *esp)
-/* PS/2マウスからの割り込み */
+/* マウスはIRQ12に繋がっている。その為、INT 0x2cが送られる */
+void inthandler2c(void)
 {
 	unsigned char data;
-	io_out8(PIC1_OCW2, 0x64);	/* IRQ-12受付完了をPIC1に通知 */
-	io_out8(PIC0_OCW2, 0x62);	/* IRQ-02受付完了をPIC0に通知 */
-	data = io_in8(PORT_KEYDAT);
-	fifo8_put(&mousefifo, data);
+	io_out8(PIC1_OCW2, 0x64);/* IRQ12受付完了を通知 */
+	io_out8(PIC0_OCW2, 0x62);/* IRQ02受付完了を通知 */
+	data = io_in8(0x0060);
+	fifo_put(&gmouse, data);
 	return;
 }
 
-void inthandler27(int *esp)
-/* PIC0からの不完全割り込み対策 */
-/* Athlon64X2機などではチップセットの都合によりPICの初期化時にこの割り込みが1度だけおこる */
-/* この割り込み処理関数は、その割り込みに対して何もしないでやり過ごす */
-/* なぜ何もしなくていいの？
-	→  この割り込みはPIC初期化時の電気的なノイズによって発生したものなので、
-		まじめに何か処理してやる必要がない。									*/
+void inthandler27(void)
 {
 	io_out8(PIC0_OCW2, 0x67); /* IRQ-07受付完了をPICに通知 */
 	return;

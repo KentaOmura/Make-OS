@@ -1,95 +1,86 @@
-/* asmhead.nas */
-struct BOOTINFO { /* 0x0ff0-0x0fff */
-	char cyls; /* ブートセクタはどこまでディスクを読んだのか */
-	char leds; /* ブート時のキーボードのLEDの状態 */
-	char vmode; /* ビデオモード  何ビットカラーか */
-	char reserve;
-	short scrnx, scrny; /* 画面解像度 */
-	char *vram;
-};
-#define ADR_BOOTINFO	0x00000ff0
 
-/* naskfunc.nas */
+/* rgbテーブルのインデックス番号 */
+#define COL8_000000 0  /* 黒 */
+#define COL8_FF0000 1  /* 赤 */
+#define COL8_00FF00 2  /* 緑 */
+#define COL8_0000FF 3  /* 青 */
+#define COL8_FFFF00 4  /* 黄色 */
+#define COL8_FF00FF 5  /* 紫 */
+#define COL8_00FFFF 6  /* 水色 */
+#define COL8_FFFFFF 7  /* 白色 */
+#define COL8_C6C6C6 8  /* 灰色 */
+#define COL8_840000 9  /* 暗い赤色 */
+#define COL8_008400 10 /* 暗い緑色 */
+#define COL8_000084 11 /* 暗い青色 */
+#define COL8_848400 12 /* 暗い黄色 */
+#define COL8_840084 13 /* 暗い紫色 */
+#define COL8_008484 14 /* 暗い水色 */
+#define COL8_848484 15 /* 暗い灰色 */
+
+struct SCREEN_INFO
+{
+	short screen_x, screen_y; /* 画面サイズ */
+	char* vram; /* VRAMのアドレス */
+};
+
+/* セグメント記述子用データ*/
+struct SEGMENT_DESCRIPTOR 
+{
+	short limit_low, base_low; 
+	char base_mid, access_right;
+	char limit_high, base_high;
+};
+
+/* 割り込み記述子用データ */
+struct GATE_DESCRIPTOR 
+{
+	short offset_low, selector;
+	char reserve, flags;
+	short offset_high;
+};
+
+/* アセンブラコード */
 void io_hlt(void);
 void io_cli(void);
 void io_sti(void);
-void io_stihlt(void);
 int io_in8(int port);
 void io_out8(int port, int data);
 int io_load_eflags(void);
 void io_store_eflags(int eflags);
-void load_gdtr(int limit, int addr);
-void load_idtr(int limit, int addr);
+void load_gdtr(int limit, int address);
+void load_idtr(int limit, int address);
 void asm_inthandler21(void);
 void asm_inthandler27(void);
 void asm_inthandler2c(void);
 
-/* fifo.c */
-struct FIFO8 {
-	unsigned char *buf;
-	int p, q, size, free, flags;
-};
-void fifo8_init(struct FIFO8 *fifo, int size, unsigned char *buf);
-int fifo8_put(struct FIFO8 *fifo, unsigned char data);
-int fifo8_get(struct FIFO8 *fifo);
-int fifo8_status(struct FIFO8 *fifo);
-
-/* graphic.c */
+/* graphic.cの定義関数 */
 void init_palette(void);
 void set_palette(int start, int end, unsigned char *rgb);
-void boxfill8(unsigned char *vram, int xsize, unsigned char c, int x0, int y0, int x1, int y1);
-void init_screen8(char *vram, int x, int y);
-void putfont8(char *vram, int xsize, int x, int y, char c, char *font);
-void putfonts8_asc(char *vram, int xsize, int x, int y, char c, unsigned char *s);
-void init_mouse_cursor8(char *mouse, char bc);
-void putblock8_8(char *vram, int vxsize, int pxsize,
-	int pysize, int px0, int py0, char *buf, int bxsize);
-#define COL8_000000		0
-#define COL8_FF0000		1
-#define COL8_00FF00		2
-#define COL8_FFFF00		3
-#define COL8_0000FF		4
-#define COL8_FF00FF		5
-#define COL8_00FFFF		6
-#define COL8_FFFFFF		7
-#define COL8_C6C6C6		8
-#define COL8_840000		9
-#define COL8_008400		10
-#define COL8_848400		11
-#define COL8_000084		12
-#define COL8_840084		13
-#define COL8_008484		14
-#define COL8_848484		15
+void boxfill8(unsigned char *vram, int xsize, unsigned char color, int start_x, int start_y, int end_x, int end_y);
+void putfont8(char *vram, int xsize, int index_x, int index_y, char color, char* font);
+void putstr8_asc(char *vram, int xsize, int index_x, int index_y, int color, unsigned char *str);
+void init_mouse_cursol(char* mouse, char col);
+void putstr8_asc(char *vram, int xsize, int index_x, int index_y, int color, unsigned char *str);
 
-/* dsctbl.c */
-struct SEGMENT_DESCRIPTOR {
-	short limit_low, base_low;
-	char base_mid, access_right;
-	char limit_high, base_high;
-};
-struct GATE_DESCRIPTOR {
-	short offset_low, selector;
-	char dw_count, access_right;
-	short offset_high;
-};
+#define AR_INTGATE32 0x008e /* 割り込みが有効である事を指す値 */
+
+/* dsctbl.cの定義 */
 void init_gdtidt(void);
 void set_segmdesc(struct SEGMENT_DESCRIPTOR *sd, unsigned int limit, int base, int ar);
 void set_gatedesc(struct GATE_DESCRIPTOR *gd, int offset, int selector, int ar);
-#define ADR_IDT			0x0026f800
-#define LIMIT_IDT		0x000007ff
-#define ADR_GDT			0x00270000
-#define LIMIT_GDT		0x0000ffff
-#define ADR_BOTPAK		0x00280000
-#define LIMIT_BOTPAK	0x0007ffff
-#define AR_DATA32_RW	0x4092
-#define AR_CODE32_ER	0x409a
-#define AR_INTGATE32	0x008e
 
-/* int.c */
+/* int.cの定義 */
 void init_pic(void);
-void inthandler21(int *esp);
-void inthandler27(int *esp);
-void inthandler2c(int *esp);
+void inthandler21(void);
+void inthandler2c(void);
+void inthandler27(void);
+void ini_keybuf(void);
+unsigned int keybord_data_num(void);
+unsigned int mouse_data_num(void);
+unsigned char get_keybord_data(void);
+unsigned char get_mouse_data(void);
+
+
 #define PIC0_ICW1		0x0020
 #define PIC0_OCW2		0x0020
 #define PIC0_IMR		0x0021
@@ -102,3 +93,23 @@ void inthandler2c(int *esp);
 #define PIC1_ICW2		0x00a1
 #define PIC1_ICW3		0x00a1
 #define PIC1_ICW4		0x00a1
+
+
+/* fifo.cの定義 */
+#define FIFO_MAX 32
+
+/* キュー構造体 */
+struct FIFO
+{
+	unsigned char data[FIFO_MAX];
+	unsigned int wcounter;
+	unsigned int rcounter;
+	unsigned int fsize;
+	unsigned int frees;
+};
+
+unsigned int fifo_status(struct FIFO* fifo);
+void fifo_put(struct FIFO* fifo, unsigned char data);
+void init_fifo(struct FIFO* fifo);
+unsigned char fifo_get(struct FIFO* fifo);
+

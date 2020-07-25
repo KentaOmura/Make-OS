@@ -1,6 +1,5 @@
-; haribote-ipl
+; hello-os
 ; TAB=4
-
 CYLS	EQU		10				; どこまで読み込むか
 
 		ORG		0x7c00			; このプログラムがどこに読み込まれるのか
@@ -37,69 +36,40 @@ entry:
 		MOV		DS,AX
 
 ; ディスクを読む
-
 		MOV		AX,0x0820
 		MOV		ES,AX
 		MOV		CH,0			; シリンダ0
 		MOV		DH,0			; ヘッド0
-		MOV		CL,2			; セクタ2
+		MOV		CL,2			; セクタ2 本プログラム自体がセクタ1に所属する。その為、次のセクタから読み取る
 readloop:
-		MOV		SI,0			; 失敗回数を数えるレジスタ
-retry:
-		MOV		AH,0x02			; AH=0x02 : ディスク読み込み
-		MOV		AL,1			; 1セクタ
+		MOV		AH,0x02
+		MOV		AL,1
 		MOV		BX,0
 		MOV		DL,0x00			; Aドライブ
-		INT		0x13			; ディスクBIOS呼び出し
-		JNC		next			; エラーがおきなければnextへ
-		ADD		SI,1			; SIに1を足す
-		CMP		SI,5			; SIと5を比較
-		JAE		error			; SI >= 5 だったらerrorへ
-		MOV		AH,0x00
-		MOV		DL,0x00			; Aドライブ
-		INT		0x13			; ドライブのリセット
-		JMP		retry
+		INT		0x13
+		JNC		next
 next:
-		MOV		AX,ES			; アドレスを0x200進める
-		ADD		AX,0x0020
-		MOV		ES,AX			; ADD ES,0x020 という命令がないのでこうしている
-		ADD		CL,1			; CLに1を足す
-		CMP		CL,18			; CLと18を比較
-		JBE		readloop		; CL <= 18 だったらreadloopへ
-		MOV		CL,1
-		ADD		DH,1
-		CMP		DH,2
-		JB		readloop		; DH < 2 だったらreadloopへ
-		MOV		DH,0
-		ADD		CH,1
-		CMP		CH,CYLS
-		JB		readloop		; CH < CYLS だったらreadloopへ
+		MOV		AX,ES
+		ADD		AX,0x0020		; 512バイト先に読み込むように設定
+		MOV		ES,AX
+		ADD		CL,1			; セクタを1つ進める。フロッピーであれば1セクタは512バイト
+		CMP		CL,18			; 1つのシリンダに18セクタ存在する。
+		JBE		readloop
+		MOV		CL, 1
+		ADD		DH, 1			; 裏のディスクを読み取っていく
+		CMP		DH, 2			; 上下ヘッドが2つなので
+		JB		readloop
+		MOV		DH, 0			; 表に切り替え
+		ADD		CH, 1			; 読み込むシリンダを進める
+		CMP		CH, CYLS
+		JB		readloop		; CYLSの定義値よりシリンダ数が少ない場合
 
 ; 読み終わったのでharibote.sysを実行だ！
 
 		MOV		[0x0ff0],CH		; IPLがどこまで読んだのかをメモ
-		JMP		0xc200
+		JMP		0xc200			; SYSTEMが読み込まれる箇所 ブートセクタは0x8000地点でSYSはその0x4200後ろ
 
-error:
-		MOV		SI,msg
-putloop:
-		MOV		AL,[SI]
-		ADD		SI,1			; SIに1を足す
-		CMP		AL,0
-		JE		fin
-		MOV		AH,0x0e			; 一文字表示ファンクション
-		MOV		BX,15			; カラーコード
-		INT		0x10			; ビデオBIOS呼び出し
-		JMP		putloop
-fin:
-		HLT						; 何かあるまでCPUを停止させる
-		JMP		fin				; 無限ループ
-msg:
-		DB		0x0a, 0x0a		; 改行を2つ
-		DB		"load error"
-		DB		0x0a			; 改行
-		DB		0
 
 		RESB	0x7dfe-$		; 0x7dfeまでを0x00で埋める命令
-
+		
 		DB		0x55, 0xaa

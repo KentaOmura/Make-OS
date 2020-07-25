@@ -1,57 +1,62 @@
-/* FIFOライブラリ */
+#include"bootpack.h"
 
-#include "bootpack.h"
-
-#define FLAGS_OVERRUN		0x0001
-
-void fifo8_init(struct FIFO8 *fifo, int size, unsigned char *buf)
-/* FIFOバッファの初期化 */
+/* FIFOの初期化 */
+void init_fifo(struct FIFO* fifo)
 {
-	fifo->size = size;
-	fifo->buf = buf;
-	fifo->free = size; /* 空き */
-	fifo->flags = 0;
-	fifo->p = 0; /* 書き込み位置 */
-	fifo->q = 0; /* 読み込み位置 */
+	fifo->data[0] = '\0';
+	fifo->wcounter = 0;
+	fifo->rcounter = 0;
+	fifo->fsize    = FIFO_MAX;
+	fifo->frees    = FIFO_MAX;
+}
+/* 現在の格納数を返却する */
+unsigned int fifo_status(struct FIFO* fifo)
+{
+	return fifo->fsize - fifo->frees;
+}
+
+void fifo_put(struct FIFO* fifo,unsigned char data)
+{
+	/* 空きが無いので、無視する */
+	if(0 == fifo->frees)
+	{
+		return;
+	}
+	
+	/* データを格納する */
+	fifo->data[fifo->wcounter] = data;
+	fifo->wcounter++;
+	fifo->frees--;
+
+	/* 書き込みカウンタを戻す */
+	if(fifo->wcounter == fifo->fsize)
+	{
+		fifo->wcounter = 0;
+	}
+	
 	return;
 }
 
-int fifo8_put(struct FIFO8 *fifo, unsigned char data)
-/* FIFOへデータを送り込んで蓄える */
+unsigned char fifo_get(struct FIFO* fifo)
 {
-	if (fifo->free == 0) {
-		/* 空きがなくてあふれた */
-		fifo->flags |= FLAGS_OVERRUN;
-		return -1;
+	unsigned char data;
+	
+	/* 格納数が0の場合 */
+	if(0 == fifo_status(fifo))
+	{
+		return 0;
 	}
-	fifo->buf[fifo->p] = data;
-	fifo->p++;
-	if (fifo->p == fifo->size) {
-		fifo->p = 0;
+	
+	/* データを取得する */
+	data = fifo->data[fifo->rcounter];
+	fifo->rcounter++;
+	fifo->frees++;
+	
+	/* 読み取りカウンタを戻す */
+	if(fifo->rcounter == fifo->fsize)
+	{
+		fifo->rcounter = 0;
 	}
-	fifo->free--;
-	return 0;
-}
-
-int fifo8_get(struct FIFO8 *fifo)
-/* FIFOからデータを一つとってくる */
-{
-	int data;
-	if (fifo->free == fifo->size) {
-		/* バッファが空っぽのときは、とりあえず-1が返される */
-		return -1;
-	}
-	data = fifo->buf[fifo->q];
-	fifo->q++;
-	if (fifo->q == fifo->size) {
-		fifo->q = 0;
-	}
-	fifo->free++;
+	
 	return data;
-}
-
-int fifo8_status(struct FIFO8 *fifo)
-/* どのくらいデータが溜まっているかを報告する */
-{
-	return fifo->size - fifo->free;
 }
