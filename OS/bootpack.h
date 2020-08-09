@@ -80,6 +80,55 @@ unsigned int mouse_data_num(void);
 unsigned char get_keybord_data(void);
 unsigned char get_mouse_data(void);
 
+/* memory.cの定義 */
+#define MEMMAN_FREES 4090 /* 約32MB */
+struct FREEINFO
+{
+	unsigned int addr, size;
+};
+
+struct MEMMAN
+{
+	int frees,lostsize, losts;
+	struct FREEINFO free[MEMMAN_FREES];
+};
+unsigned int memtest(unsigned int start, unsigned int end);
+void memman_init(struct MEMMAN *man);
+unsigned int memman_total(struct MEMMAN *man);
+unsigned int memman_alloc(struct MEMMAN *man, unsigned int size);
+int memman_free(struct MEMMAN *man, unsigned int addr, unsigned int size);
+unsigned int memman_alloc_4k(struct MEMMAN *man, unsigned int size);
+int memman_free_4k(struct MEMMAN *man, unsigned int addr, unsigned int size);
+
+
+/* mouse.cの定義 */
+/*
+	マウス解析構造体
+*/
+#define KEYCMD_SENDTO_MOUSE		0xd4
+#define MOUSECMD_ENABLE			0xf4
+
+struct MOUSE_DEC
+{
+	unsigned char data[3]; /* データ */
+	unsigned char phase;   /* フェーズ */
+	int x, y, btn;         /* マウスポインタのx, yとボタンの情報 */
+};
+
+int mouse_decode(struct MOUSE_DEC *mdec, unsigned char data);
+void enable_mouse(struct MOUSE_DEC *mdec);
+
+/* keybord.cの定義 */
+
+#define PORT_KEYDAT				0x0060
+#define PORT_KEYSTA				0x0064
+#define PORT_KEYCMD				0x0064
+#define KEYSTA_SEND_NOTREADY	0x02
+#define KEYCMD_WRITE_MODE		0x60
+#define KBC_MODE				0x47
+
+void wait_KBC_sendready(void);
+void init_keyboard(void);
 
 #define PIC0_ICW1		0x0020
 #define PIC0_OCW2		0x0020
@@ -113,3 +162,30 @@ void fifo_put(struct FIFO* fifo, unsigned char data);
 void init_fifo(struct FIFO* fifo);
 unsigned char fifo_get(struct FIFO* fifo);
 
+
+
+/* sheet.cの定義 */
+struct SHEET 
+{
+	unsigned char *buf;
+	int bxsize, bysize, vx0, vy0, col_inv, height, flags;
+};
+
+#define MAX_SHEETS 256
+#define SHEET_USE 1
+struct SHTCTL
+{
+	unsigned char *vram;
+	int xsize, ysize, top;
+	struct SHEET *sheets[MAX_SHEETS];
+	struct SHEET sheets0[MAX_SHEETS];
+};
+
+struct SHTCTL *shtctl_init(struct MEMMAN *man, unsigned char *vram, int xsize, int ysize);
+struct SHEET *sheet_alloc(struct SHTCTL *ctl);
+void sheet_setbuf(struct SHEET *sht, unsigned char *buf, int xsize, int ysize, int col_inv);
+void sheet_updown(struct SHTCTL *ctl, struct SHEET *sht, int height);
+void sheet_refreshsub(struct SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1);
+void sheet_refresh(struct SHEET *ctl, struct SHEET *sht, int bx0, int by0, int bx1, int by1);
+void sheet_slide(struct SHTCTL *ctl, struct SHEET *sht, int vx0, int vy0);
+void sheet_free(struct SHTCTL *ctl, struct SHEET *sht);
