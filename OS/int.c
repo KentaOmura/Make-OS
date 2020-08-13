@@ -26,7 +26,7 @@ void init_pic(void)
 }
 
 /* キーボードとマウスのキューを初期化する */
-void ini_keybuf(void)
+void init_keybuf(void)
 {
 	init_fifo(&gkeyboard);
 	init_fifo(&gmouse);

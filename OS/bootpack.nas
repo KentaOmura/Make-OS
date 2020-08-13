@@ -1,0 +1,343 @@
+[FORMAT "WCOFF"]
+[INSTRSET "i486p"]
+[OPTIMIZE 1]
+[OPTION 1]
+[BITS 32]
+	EXTERN	_enable_mouse
+	EXTERN	_init_palette
+	EXTERN	_shtctl_init
+	EXTERN	_sheet_alloc
+	EXTERN	_memman_alloc_4k
+	EXTERN	_sheet_setbuf
+	EXTERN	_sheet_updown
+	EXTERN	_boxfill8
+	EXTERN	_init_mouse_cursol
+	EXTERN	_sheet_slide
+	EXTERN	_memman_total
+	EXTERN	_sprintf
+	EXTERN	_putstr8_asc
+	EXTERN	_sheet_refresh
+	EXTERN	_io_cli
+	EXTERN	_keybord_data_num
+	EXTERN	_mouse_data_num
+	EXTERN	_get_mouse_data
+	EXTERN	_io_sti
+	EXTERN	_mouse_decode
+	EXTERN	_get_keybord_data
+	EXTERN	_io_stihlt
+	EXTERN	_memtest
+	EXTERN	_memman_init
+	EXTERN	_memman_free
+	EXTERN	_init_gdtidt
+	EXTERN	_init_pic
+	EXTERN	_init_keybuf
+	EXTERN	_io_out8
+	EXTERN	_init_keyboard
+[FILE "bootpack.c"]
+[SECTION .data]
+LC0:
+	DB	"memory %dMB  free : %dKB",0x00
+LC1:
+	DB	"%02X",0x00
+[SECTION .text]
+	GLOBAL	_HariMain
+_HariMain:
+	PUSH	EBP
+	MOV	EBP,ESP
+	PUSH	EDI
+	PUSH	ESI
+	PUSH	EBX
+	LEA	EBX,DWORD [-348+EBP]
+	SUB	ESP,360
+	PUSH	3932160
+	CALL	_memoryUsage
+	MOV	DWORD [ESP],EAX
+	PUSH	3932160
+	CALL	_memoryInit
+	CALL	_hardWareInit
+	LEA	EAX,DWORD [-92+EBP]
+	PUSH	EAX
+	CALL	_enable_mouse
+	CALL	_init_palette
+	MOVSX	EAX,WORD [4086]
+	PUSH	EAX
+	MOVSX	EAX,WORD [4084]
+	PUSH	EAX
+	PUSH	DWORD [4088]
+	PUSH	3932160
+	CALL	_shtctl_init
+	MOV	ESI,EAX
+	PUSH	EAX
+	CALL	_sheet_alloc
+	ADD	ESP,32
+	PUSH	ESI
+	MOV	DWORD [-360+EBP],EAX
+	CALL	_sheet_alloc
+	MOVSX	EDX,WORD [4086]
+	MOV	DWORD [-364+EBP],EAX
+	MOVSX	EAX,WORD [4084]
+	IMUL	EAX,EDX
+	PUSH	EAX
+	PUSH	3932160
+	CALL	_memman_alloc_4k
+	PUSH	-1
+	MOV	EDI,EAX
+	MOVSX	EAX,WORD [4086]
+	PUSH	EAX
+	MOVSX	EAX,WORD [4084]
+	PUSH	EAX
+	PUSH	EDI
+	PUSH	DWORD [-360+EBP]
+	CALL	_sheet_setbuf
+	ADD	ESP,32
+	PUSH	99
+	PUSH	8
+	PUSH	8
+	PUSH	EBX
+	PUSH	DWORD [-364+EBP]
+	CALL	_sheet_setbuf
+	PUSH	0
+	PUSH	DWORD [-360+EBP]
+	PUSH	ESI
+	CALL	_sheet_updown
+	ADD	ESP,32
+	PUSH	1
+	PUSH	DWORD [-364+EBP]
+	PUSH	ESI
+	CALL	_sheet_updown
+	MOVSX	EAX,WORD [4086]
+	PUSH	EAX
+	MOVSX	EAX,WORD [4084]
+	PUSH	EAX
+	PUSH	0
+	PUSH	0
+	PUSH	3
+	MOVSX	EAX,WORD [4084]
+	PUSH	EAX
+	PUSH	EDI
+	CALL	_boxfill8
+	ADD	ESP,40
+	PUSH	3
+	PUSH	EBX
+	MOV	EBX,2
+	CALL	_init_mouse_cursol
+	PUSH	0
+	PUSH	0
+	PUSH	DWORD [-360+EBP]
+	PUSH	ESI
+	CALL	_sheet_slide
+	MOVSX	EAX,WORD [4084]
+	LEA	ECX,DWORD [-8+EAX]
+	MOV	EAX,ECX
+	CDQ
+	IDIV	EBX
+	MOV	ECX,EAX
+	MOV	DWORD [-356+EBP],EAX
+	MOVSX	EAX,WORD [4086]
+	SUB	EAX,36
+	CDQ
+	IDIV	EBX
+	PUSH	EAX
+	MOV	DWORD [-352+EBP],EAX
+	PUSH	ECX
+	LEA	EBX,DWORD [-76+EBP]
+	PUSH	DWORD [-364+EBP]
+	PUSH	ESI
+	CALL	_sheet_slide
+	ADD	ESP,40
+	PUSH	3932160
+	CALL	_memman_total
+	SHR	EAX,10
+	MOV	DWORD [ESP],EAX
+	MOV	EAX,DWORD [3932160]
+	SHR	EAX,20
+	PUSH	EAX
+	PUSH	LC0
+	PUSH	EBX
+	CALL	_sprintf
+	PUSH	EBX
+	PUSH	7
+	PUSH	48
+	PUSH	0
+	MOVSX	EAX,WORD [4084]
+	PUSH	EAX
+	PUSH	EDI
+	CALL	_putstr8_asc
+	ADD	ESP,40
+	PUSH	64
+	MOVSX	EAX,WORD [4084]
+	PUSH	EAX
+	PUSH	0
+	PUSH	0
+	PUSH	DWORD [-360+EBP]
+	PUSH	ESI
+	CALL	_sheet_refresh
+	ADD	ESP,24
+L11:
+	CALL	_io_cli
+	CALL	_keybord_data_num
+	MOV	EBX,EAX
+	CALL	_mouse_data_num
+	LEA	EAX,DWORD [EAX+EBX*1]
+	TEST	EAX,EAX
+	JE	L12
+	CALL	_keybord_data_num
+	TEST	EAX,EAX
+	JNE	L13
+	CALL	_mouse_data_num
+	TEST	EAX,EAX
+	JE	L11
+	CALL	_get_mouse_data
+	MOV	BL,AL
+	CALL	_io_sti
+	MOVZX	EAX,BL
+	PUSH	EAX
+	LEA	EAX,DWORD [-92+EBP]
+	PUSH	EAX
+	CALL	_mouse_decode
+	POP	EDX
+	POP	ECX
+	DEC	EAX
+	JNE	L11
+	MOV	EAX,DWORD [-88+EBP]
+	LEA	EBX,DWORD [-356+EBP]
+	ADD	DWORD [-356+EBP],EAX
+	MOV	EAX,DWORD [-84+EBP]
+	ADD	DWORD [-352+EBP],EAX
+	MOVSX	EAX,WORD [4086]
+	PUSH	EAX
+	MOVSX	EAX,WORD [4084]
+	PUSH	EAX
+	PUSH	EBX
+	CALL	_MouseCoodinateThreshold
+	PUSH	DWORD [-352+EBP]
+	PUSH	DWORD [-356+EBP]
+	PUSH	DWORD [-364+EBP]
+	PUSH	ESI
+	CALL	_sheet_slide
+	ADD	ESP,28
+	JMP	L11
+L13:
+	CALL	_get_keybord_data
+	MOV	BL,AL
+	CALL	_io_sti
+	MOVZX	EAX,BL
+	PUSH	EAX
+	LEA	EBX,DWORD [-76+EBP]
+	PUSH	LC1
+	PUSH	EBX
+	CALL	_sprintf
+	PUSH	31
+	MOVSX	EAX,WORD [4084]
+	DEC	EAX
+	PUSH	EAX
+	PUSH	16
+	PUSH	0
+	PUSH	3
+	MOVSX	EAX,WORD [4084]
+	PUSH	EAX
+	PUSH	EDI
+	CALL	_boxfill8
+	ADD	ESP,40
+	PUSH	EBX
+	PUSH	7
+	PUSH	16
+	PUSH	0
+	MOVSX	EAX,WORD [4084]
+	PUSH	EAX
+	PUSH	EDI
+	CALL	_putstr8_asc
+	PUSH	32
+	PUSH	16
+	PUSH	16
+	PUSH	0
+	PUSH	DWORD [-360+EBP]
+	PUSH	ESI
+	CALL	_sheet_refresh
+	ADD	ESP,48
+	JMP	L11
+L12:
+	CALL	_io_stihlt
+	JMP	L11
+	GLOBAL	_memoryUsage
+_memoryUsage:
+	PUSH	EBP
+	MOV	EBP,ESP
+	PUSH	-1073741825
+	PUSH	4194304
+	CALL	_memtest
+	LEAVE
+	RET
+	GLOBAL	_memoryInit
+_memoryInit:
+	PUSH	EBP
+	MOV	EBP,ESP
+	PUSH	ESI
+	PUSH	EBX
+	MOV	EBX,DWORD [12+EBP]
+	MOV	ESI,DWORD [8+EBP]
+	PUSH	EBX
+	SUB	EBX,4194304
+	PUSH	ESI
+	CALL	_memman_init
+	PUSH	647168
+	PUSH	4096
+	PUSH	ESI
+	CALL	_memman_free
+	PUSH	EBX
+	PUSH	4194304
+	PUSH	ESI
+	CALL	_memman_free
+	LEA	ESP,DWORD [-8+EBP]
+	POP	EBX
+	POP	ESI
+	POP	EBP
+	RET
+	GLOBAL	_hardWareInit
+_hardWareInit:
+	PUSH	EBP
+	MOV	EBP,ESP
+	CALL	_init_gdtidt
+	CALL	_init_pic
+	CALL	_init_keybuf
+	CALL	_io_sti
+	PUSH	249
+	PUSH	33
+	CALL	_io_out8
+	PUSH	239
+	PUSH	161
+	CALL	_io_out8
+	ADD	ESP,16
+	LEAVE
+	JMP	_init_keyboard
+	GLOBAL	_MouseCoodinateThreshold
+_MouseCoodinateThreshold:
+	PUSH	EBP
+	MOV	EBP,ESP
+	MOV	EAX,DWORD [8+EBP]
+	CMP	DWORD [EAX],0
+	JS	L22
+L18:
+	CMP	DWORD [4+EAX],0
+	JS	L23
+L19:
+	MOV	EDX,DWORD [12+EBP]
+	DEC	EDX
+	CMP	DWORD [EAX],EDX
+	JBE	L20
+	MOV	DWORD [EAX],EDX
+L20:
+	MOV	EDX,DWORD [16+EBP]
+	DEC	EDX
+	CMP	DWORD [4+EAX],EDX
+	JBE	L17
+	MOV	DWORD [4+EAX],EDX
+L17:
+	POP	EBP
+	RET
+L23:
+	MOV	DWORD [4+EAX],0
+	JMP	L19
+L22:
+	MOV	DWORD [EAX],0
+	JMP	L18

@@ -40,8 +40,9 @@ unsigned int memtest(unsigned int start, unsigned int end)
 	return i;
 }
 
-void memman_init(struct MEMMAN *man)
+void memman_init(struct MEMMAN *man, unsigned int memtotal)
 {
+	man->storage = memtotal;
 	man->frees    = 0; /* 空き情報の個数 */
 	man->lostsize = 0; /* 解放に失敗した合計サイズ */
 	man->losts = 0;    /* 解放に失敗した回数 */

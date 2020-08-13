@@ -74,7 +74,7 @@ void init_pic(void);
 void inthandler21(void);
 void inthandler2c(void);
 void inthandler27(void);
-void ini_keybuf(void);
+void init_keybuf(void);
 unsigned int keybord_data_num(void);
 unsigned int mouse_data_num(void);
 unsigned char get_keybord_data(void);
@@ -89,11 +89,12 @@ struct FREEINFO
 
 struct MEMMAN
 {
+	unsigned int storage;
 	int frees,lostsize, losts;
 	struct FREEINFO free[MEMMAN_FREES];
 };
 unsigned int memtest(unsigned int start, unsigned int end);
-void memman_init(struct MEMMAN *man);
+void memman_init(struct MEMMAN *man, unsigned int memtotal);
 unsigned int memman_total(struct MEMMAN *man);
 unsigned int memman_alloc(struct MEMMAN *man, unsigned int size);
 int memman_free(struct MEMMAN *man, unsigned int addr, unsigned int size);
