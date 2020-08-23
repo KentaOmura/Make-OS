@@ -45,14 +45,14 @@ void putblock8_8(char *vram, int vxsize, int pxsize, int pysize, int px0, int py
 void init_mouse_cursol(char* mouse, char col)
 {
 	static char mouse_coursol[8][8] = {
-		 "o......."
-		,"ooo....."
-		,"oooo...."
-		,"oooooo.."
-		,"oooooooo"
-		,"...ooo.."
-		,"....oo.."
-		,".....oo."
+		 ".@o@...."
+		,".@oo@..."
+		,".@ooo@.."
+		,".@oooo@."
+		,".@ooooo@"
+		,".. @oo@."
+		,"....@o@."
+		,".....@o@"
 	};
 	
 	int x, y;
@@ -68,6 +68,10 @@ void init_mouse_cursol(char* mouse, char col)
 			if(mouse_coursol[y][x] == '.')
 			{
 				mouse[y * 8 + x] = col;
+			}
+			if(mouse_coursol[y][x] == '@')
+			{
+				mouse[y * 8 + x] = COL8_000000;
 			}
 		}
 	}
@@ -112,7 +116,8 @@ void init_palette(void)
 		0xff, 0x00, 0xff,		/* Ô+Â = ‡ */
 		0x00, 0xff, 0xff,		/* —Î+Â = …F */
 		0xff, 0xff, 0xff,		/* ”’ */
-		0xc6, 0xc6, 0xc6,		/* ŠDF */
+		0xf2, 0xf2, 0xf2,		/* ŠDF */
+		//0xc6, 0xc6, 0xc6,		/* ŠDF */
 		0x84, 0x00, 0x00,		/* ˆÃ‚¢Ô */
 		0x00, 0x84, 0x00,		/* ˆÃ‚¢—Î */
 		0x00, 0x00, 0x84,		/* ˆÃ‚¢Â */

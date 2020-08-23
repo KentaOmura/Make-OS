@@ -1,62 +1,53 @@
 #include"bootpack.h"
 
-/* FIFO‚Ì‰Šú‰» */
-void init_fifo(struct FIFO* fifo)
+unsigned int fifo32_status(struct FIFO32* fifo)
 {
-	fifo->data[0] = '\0';
-	fifo->wcounter = 0;
-	fifo->rcounter = 0;
-	fifo->fsize    = FIFO_MAX;
-	fifo->frees    = FIFO_MAX;
-}
-/* Œ»İ‚ÌŠi”[”‚ğ•Ô‹p‚·‚é */
-unsigned int fifo_status(struct FIFO* fifo)
-{
-	return fifo->fsize - fifo->frees;
+	return fifo->size - fifo->free;
 }
 
-void fifo_put(struct FIFO* fifo,unsigned char data)
+void fifo32_init(struct FIFO32 *fifo, int size, int *buf)
 {
-	/* ‹ó‚«‚ª–³‚¢‚Ì‚ÅA–³‹‚·‚é */
-	if(0 == fifo->frees)
-	{
-		return;
-	}
-	
-	/* ƒf[ƒ^‚ğŠi”[‚·‚é */
-	fifo->data[fifo->wcounter] = data;
-	fifo->wcounter++;
-	fifo->frees--;
-
-	/* ‘‚«‚İƒJƒEƒ“ƒ^‚ğ–ß‚· */
-	if(fifo->wcounter == fifo->fsize)
-	{
-		fifo->wcounter = 0;
-	}
-	
-	return;
+	fifo->size = size;
+	fifo->buf  = buf;
+	fifo->free = size;
+	fifo->flags = 0;
+	fifo->q = 0;
+	fifo->p = 0;
 }
 
-unsigned char fifo_get(struct FIFO* fifo)
+int fifo32_put(struct FIFO32 *fifo, int data)
 {
-	unsigned char data;
-	
-	/* Ši”[”‚ª0‚Ìê‡ */
-	if(0 == fifo_status(fifo))
+	if(fifo->free == 0)
 	{
-		return 0;
+		fifo->flags |= FLAGS_OVERRUN;
+		return -1;
+	}
+	fifo->buf[fifo->p] = data;
+	fifo->p++;
+	if(fifo->p == fifo->size)
+	{
+		fifo->p = 0;
+	}
+	fifo->free--;
+	
+	return 0;
+}
+
+int fifo32_get(struct FIFO32 *fifo)
+{
+	int data;
+	if(fifo->free == fifo->size)
+	{
+		return -1;
 	}
 	
-	/* ƒf[ƒ^‚ğæ“¾‚·‚é */
-	data = fifo->data[fifo->rcounter];
-	fifo->rcounter++;
-	fifo->frees++;
-	
-	/* “Ç‚İæ‚èƒJƒEƒ“ƒ^‚ğ–ß‚· */
-	if(fifo->rcounter == fifo->fsize)
+	data = fifo->buf[fifo->q];
+	fifo->q++;
+	if(fifo->q == fifo->size)
 	{
-		fifo->rcounter = 0;
+		fifo->q = 0;
 	}
+	fifo->free++;
 	
 	return data;
 }

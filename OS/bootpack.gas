@@ -1,8 +1,14 @@
 	.file	"bootpack.c"
 	.data
 LC0:
-	.ascii "memory %dMB  free : %dKB\0"
+	.ascii "Timer\0"
 LC1:
+	.ascii "memory %dMB  free : %dKB\0"
+LC4:
+	.ascii "3[sec]\0"
+LC3:
+	.ascii "10[sec]\0"
+LC2:
 	.ascii "%02X\0"
 	.text
 	.balign 2
@@ -14,17 +20,63 @@ _HariMain:
 	pushl	%edi
 	pushl	%esi
 	pushl	%ebx
-	leal	-348(%ebp), %ebx
-	subl	$360, %esp
+	leal	-124(%ebp), %esi
+	subl	$1424, %esp
+	call	_hardWareInit
+	leal	-1148(%ebp), %eax
+	pushl	%eax
+	pushl	$256
+	pushl	%esi
+	call	_fifo32_init
+	pushl	$256
+	pushl	%esi
+	call	_init_keyboard
+	leal	-92(%ebp), %eax
+	pushl	%eax
+	pushl	$512
+	pushl	%esi
+	call	_enable_mouse
+	addl	$32, %esp
+	pushl	$248
+	pushl	$33
+	call	_io_out8
+	pushl	$239
+	pushl	$161
+	call	_io_out8
 	pushl	$3932160
 	call	_memoryUsage
 	movl	%eax, (%esp)
 	pushl	$3932160
 	call	_memoryInit
-	call	_hardWareInit
-	leal	-92(%ebp), %eax
+	call	_timer_alloc
+	pushl	$10
+	pushl	%esi
+	movl	%eax, %ebx
 	pushl	%eax
-	call	_enable_mouse
+	call	_timer_init
+	addl	$36, %esp
+	pushl	$1000
+	pushl	%ebx
+	call	_timer_settime
+	call	_timer_alloc
+	pushl	$3
+	pushl	%esi
+	movl	%eax, %ebx
+	pushl	%eax
+	call	_timer_init
+	pushl	$300
+	pushl	%ebx
+	call	_timer_settime
+	call	_timer_alloc
+	pushl	$1
+	pushl	%esi
+	pushl	%eax
+	movl	%eax, -1428(%ebp)
+	call	_timer_init
+	addl	$40, %esp
+	pushl	$50
+	pushl	-1428(%ebp)
+	call	_timer_settime
 	call	_init_palette
 	movswl	4086,%eax
 	pushl	%eax
@@ -33,19 +85,27 @@ _HariMain:
 	pushl	4088
 	pushl	$3932160
 	call	_shtctl_init
-	movl	%eax, %esi
+	movl	%eax, %ebx
 	pushl	%eax
 	call	_sheet_alloc
-	addl	$32, %esp
-	pushl	%esi
-	movl	%eax, -360(%ebp)
+	pushl	%ebx
+	movl	%eax, -1416(%ebp)
 	call	_sheet_alloc
+	addl	$32, %esp
+	movl	%eax, -1420(%ebp)
+	pushl	%ebx
+	leal	-1404(%ebp), %ebx
+	call	_sheet_alloc
+	movl	%eax, %esi
 	movswl	4086,%edx
-	movl	%eax, -364(%ebp)
 	movswl	4084,%eax
 	imull	%edx, %eax
 	pushl	%eax
 	pushl	$3932160
+	call	_memman_alloc_4k
+	pushl	$10880
+	pushl	$3932160
+	movl	%eax, -1424(%ebp)
 	call	_memman_alloc_4k
 	pushl	$-1
 	movl	%eax, %edi
@@ -53,25 +113,23 @@ _HariMain:
 	pushl	%eax
 	movswl	4084,%eax
 	pushl	%eax
-	pushl	%edi
-	pushl	-360(%ebp)
+	pushl	-1424(%ebp)
+	pushl	-1416(%ebp)
 	call	_sheet_setbuf
-	addl	$32, %esp
-	pushl	$99
+	addl	$40, %esp
+	pushl	$3
 	pushl	$8
 	pushl	$8
 	pushl	%ebx
-	pushl	-364(%ebp)
+	pushl	-1420(%ebp)
 	call	_sheet_setbuf
-	pushl	$0
-	pushl	-360(%ebp)
+	pushl	$88
+	pushl	$68
+	pushl	$160
+	pushl	%edi
 	pushl	%esi
-	call	_sheet_updown
-	addl	$32, %esp
-	pushl	$1
-	pushl	-364(%ebp)
-	pushl	%esi
-	call	_sheet_updown
+	call	_sheet_setbuf
+	addl	$40, %esp
 	movswl	4086,%eax
 	pushl	%eax
 	movswl	4084,%eax
@@ -81,17 +139,22 @@ _HariMain:
 	pushl	$3
 	movswl	4084,%eax
 	pushl	%eax
-	pushl	%edi
+	pushl	-1424(%ebp)
 	call	_boxfill8
-	addl	$40, %esp
 	pushl	$3
 	pushl	%ebx
 	movl	$2, %ebx
 	call	_init_mouse_cursol
+	addl	$36, %esp
+	pushl	$LC0
+	pushl	$68
+	pushl	$160
+	pushl	%edi
+	leal	-1412(%ebp), %edi
+	call	_makeWindow8
 	pushl	$0
 	pushl	$0
-	pushl	-360(%ebp)
-	pushl	%esi
+	pushl	-1416(%ebp)
 	call	_sheet_slide
 	movswl	4084,%eax
 	leal	-8(%eax), %ecx
@@ -99,19 +162,32 @@ _HariMain:
 	cltd
 	idivl	%ebx
 	movl	%eax, %ecx
-	movl	%eax, -356(%ebp)
+	movl	%eax, -1412(%ebp)
 	movswl	4086,%eax
 	subl	$36, %eax
 	cltd
 	idivl	%ebx
 	pushl	%eax
-	movl	%eax, -352(%ebp)
+	movl	%eax, -1408(%ebp)
 	pushl	%ecx
 	leal	-76(%ebp), %ebx
-	pushl	-364(%ebp)
-	pushl	%esi
+	pushl	-1420(%ebp)
 	call	_sheet_slide
 	addl	$40, %esp
+	pushl	$72
+	pushl	$80
+	pushl	%esi
+	call	_sheet_slide
+	pushl	$0
+	pushl	-1416(%ebp)
+	call	_sheet_updown
+	pushl	$1
+	pushl	%esi
+	call	_sheet_updown
+	pushl	$2
+	pushl	-1420(%ebp)
+	call	_sheet_updown
+	addl	$36, %esp
 	pushl	$3932160
 	call	_memman_total
 	shrl	$10, %eax
@@ -119,7 +195,7 @@ _HariMain:
 	movl	3932160, %eax
 	shrl	$20, %eax
 	pushl	%eax
-	pushl	$LC0
+	pushl	$LC1
 	pushl	%ebx
 	call	_sprintf
 	pushl	%ebx
@@ -128,7 +204,7 @@ _HariMain:
 	pushl	$0
 	movswl	4084,%eax
 	pushl	%eax
-	pushl	%edi
+	pushl	-1424(%ebp)
 	call	_putstr8_asc
 	addl	$40, %esp
 	pushl	$64
@@ -136,27 +212,91 @@ _HariMain:
 	pushl	%eax
 	pushl	$0
 	pushl	$0
-	pushl	-360(%ebp)
-	pushl	%esi
+	pushl	-1416(%ebp)
 	call	_sheet_refresh
-	addl	$24, %esp
-L11:
+	addl	$20, %esp
+L18:
+	leal	-124(%ebp), %esi
 	call	_io_cli
-	call	_keybord_data_num
+	pushl	%esi
+	call	_fifo32_status
+	popl	%ecx
+	testl	%eax, %eax
+	je	L22
+	pushl	%esi
+	call	_fifo32_get
 	movl	%eax, %ebx
-	call	_mouse_data_num
-	leal	(%eax,%ebx), %eax
-	testl	%eax, %eax
-	je	L12
-	call	_keybord_data_num
-	testl	%eax, %eax
-	jne	L13
-	call	_mouse_data_num
-	testl	%eax, %eax
-	je	L11
-	call	_get_mouse_data
-	movb	%al, %bl
 	call	_io_sti
+	popl	%edx
+	leal	-256(%ebx), %eax
+	cmpl	$255, %eax
+	jbe	L23
+	leal	-512(%ebx), %eax
+	cmpl	$255, %eax
+	jbe	L24
+	cmpl	$10, %ebx
+	je	L25
+	cmpl	$3, %ebx
+	je	L26
+	testl	%ebx, %ebx
+	je	L16
+	pushl	$0
+	pushl	%esi
+	pushl	-1428(%ebp)
+	call	_timer_init
+	pushl	$111
+	pushl	$15
+	pushl	$96
+	pushl	$8
+	pushl	$7
+L20:
+	movswl	4084,%eax
+	pushl	%eax
+	pushl	-1424(%ebp)
+	call	_boxfill8
+	addl	$40, %esp
+	pushl	$50
+	pushl	-1428(%ebp)
+	call	_timer_settime
+	pushl	$112
+	pushl	$16
+	pushl	$96
+	pushl	$8
+	pushl	-1416(%ebp)
+	call	_sheet_refresh
+L19:
+	addl	$28, %esp
+	jmp	L18
+L16:
+	pushl	$1
+	pushl	%esi
+	pushl	-1428(%ebp)
+	call	_timer_init
+	pushl	$111
+	pushl	$15
+	pushl	$96
+	pushl	$8
+	pushl	$3
+	jmp	L20
+L26:
+	pushl	$6
+	pushl	$LC4
+	pushl	$3
+	pushl	$7
+	pushl	$80
+L21:
+	pushl	$0
+	pushl	-1416(%ebp)
+	call	_putfont8_sht
+	jmp	L19
+L25:
+	pushl	$7
+	pushl	$LC3
+	pushl	$3
+	pushl	$7
+	pushl	$64
+	jmp	L21
+L24:
 	movzbl	%bl, %eax
 	pushl	%eax
 	leal	-92(%ebp), %eax
@@ -165,67 +305,42 @@ L11:
 	popl	%edx
 	popl	%ecx
 	decl	%eax
-	jne	L11
+	jne	L18
 	movl	-88(%ebp), %eax
-	leal	-356(%ebp), %ebx
-	addl	%eax, -356(%ebp)
+	addl	%eax, -1412(%ebp)
 	movl	-84(%ebp), %eax
-	addl	%eax, -352(%ebp)
+	addl	%eax, 4(%edi)
 	movswl	4086,%eax
 	pushl	%eax
 	movswl	4084,%eax
 	pushl	%eax
-	pushl	%ebx
+	pushl	%edi
 	call	_MouseCoodinateThreshold
-	pushl	-352(%ebp)
-	pushl	-356(%ebp)
-	pushl	-364(%ebp)
-	pushl	%esi
+	pushl	4(%edi)
+	pushl	-1412(%ebp)
+	pushl	-1420(%ebp)
 	call	_sheet_slide
-	addl	$28, %esp
-	jmp	L11
-L13:
-	call	_get_keybord_data
-	movb	%al, %bl
-	call	_io_sti
-	movzbl	%bl, %eax
+	addl	$24, %esp
+	jmp	L18
+L23:
 	pushl	%eax
 	leal	-76(%ebp), %ebx
-	pushl	$LC1
+	pushl	$LC2
 	pushl	%ebx
 	call	_sprintf
-	pushl	$31
-	movswl	4084,%eax
-	decl	%eax
-	pushl	%eax
-	pushl	$16
-	pushl	$0
 	pushl	$3
-	movswl	4084,%eax
-	pushl	%eax
-	pushl	%edi
-	call	_boxfill8
-	addl	$40, %esp
 	pushl	%ebx
+	pushl	$3
 	pushl	$7
 	pushl	$16
 	pushl	$0
-	movswl	4084,%eax
-	pushl	%eax
-	pushl	%edi
-	call	_putstr8_asc
-	pushl	$32
-	pushl	$16
-	pushl	$16
-	pushl	$0
-	pushl	-360(%ebp)
-	pushl	%esi
-	call	_sheet_refresh
-	addl	$48, %esp
-	jmp	L11
-L12:
+	pushl	-1416(%ebp)
+	call	_putfont8_sht
+	addl	$40, %esp
+	jmp	L18
+L22:
 	call	_io_stihlt
-	jmp	L11
+	jmp	L18
 	.balign 2
 .globl _memoryUsage
 	.def	_memoryUsage;	.scl	2;	.type	32;	.endef
@@ -272,17 +387,9 @@ _hardWareInit:
 	movl	%esp, %ebp
 	call	_init_gdtidt
 	call	_init_pic
-	call	_init_keybuf
 	call	_io_sti
-	pushl	$249
-	pushl	$33
-	call	_io_out8
-	pushl	$239
-	pushl	$161
-	call	_io_out8
-	addl	$16, %esp
-	leave
-	jmp	_init_keyboard
+	popl	%ebp
+	jmp	_init_pit
 	.balign 2
 .globl _MouseCoodinateThreshold
 	.def	_MouseCoodinateThreshold;	.scl	2;	.type	32;	.endef
@@ -291,34 +398,258 @@ _MouseCoodinateThreshold:
 	movl	%esp, %ebp
 	movl	8(%ebp), %eax
 	cmpl	$0, (%eax)
-	js	L22
-L18:
+	js	L35
+L31:
 	cmpl	$0, 4(%eax)
-	js	L23
-L19:
+	js	L36
+L32:
 	movl	12(%ebp), %edx
 	decl	%edx
 	cmpl	%edx, (%eax)
-	jbe	L20
+	jbe	L33
 	movl	%edx, (%eax)
-L20:
+L33:
 	movl	16(%ebp), %edx
 	decl	%edx
 	cmpl	%edx, 4(%eax)
-	jbe	L17
+	jbe	L30
 	movl	%edx, 4(%eax)
-L17:
+L30:
 	popl	%ebp
 	ret
-L23:
+L36:
 	movl	$0, 4(%eax)
-	jmp	L19
-L22:
+	jmp	L32
+L35:
 	movl	$0, (%eax)
-	jmp	L18
-	.def	_init_keyboard;	.scl	2;	.type	32;	.endef
-	.def	_io_out8;	.scl	2;	.type	32;	.endef
-	.def	_init_keybuf;	.scl	2;	.type	32;	.endef
+	jmp	L31
+	.data
+_closebtn.0:
+	.ascii "OOOOOOOOOOOOOOO@"
+	.ascii "OQQQQQQQQQQQQQ$@"
+	.ascii "OQQQQQQQQQQQQQ$@"
+	.ascii "OQQQ@@QQQQ@@QQ$@"
+	.ascii "OQQQQ@@QQ@@QQQ$@"
+	.ascii "OQQQQQ@@@@QQQQ$@"
+	.ascii "OQQQQQQ@@QQQQQ$@"
+	.ascii "OQQQQQ@@@@QQQQ$@"
+	.ascii "OQQQQ@@QQ@@QQQ$@"
+	.ascii "OQQQ@@QQQQ@@QQ$@"
+	.ascii "OQQQQQQQQQQQQQ$@"
+	.ascii "OQQQQQQQQQQQQQ$@"
+	.ascii "O$$$$$$$$$$$$$$@"
+	.ascii "@@@@@@@@@@@@@@@@"
+	.text
+	.balign 2
+.globl _makeWindow8
+	.def	_makeWindow8;	.scl	2;	.type	32;	.endef
+_makeWindow8:
+	pushl	%ebp
+	movl	%esp, %ebp
+	pushl	%edi
+	pushl	%esi
+	pushl	%ebx
+	subl	$16, %esp
+	movl	12(%ebp), %ebx
+	pushl	$0
+	leal	-1(%ebx), %eax
+	leal	-2(%ebx), %edi
+	pushl	%eax
+	movl	%eax, -20(%ebp)
+	pushl	$0
+	pushl	$0
+	pushl	$8
+	pushl	%ebx
+	pushl	8(%ebp)
+	call	_boxfill8
+	pushl	$1
+	pushl	%edi
+	pushl	$1
+	pushl	$1
+	pushl	$7
+	pushl	%ebx
+	pushl	8(%ebp)
+	call	_boxfill8
+	movl	16(%ebp), %eax
+	addl	$56, %esp
+	decl	%eax
+	movl	%eax, -24(%ebp)
+	pushl	%eax
+	pushl	$0
+	pushl	$0
+	pushl	$0
+	pushl	$8
+	pushl	%ebx
+	pushl	8(%ebp)
+	call	_boxfill8
+	movl	16(%ebp), %esi
+	subl	$2, %esi
+	pushl	%esi
+	pushl	$1
+	pushl	$1
+	pushl	$1
+	pushl	$7
+	pushl	%ebx
+	pushl	8(%ebp)
+	call	_boxfill8
+	addl	$56, %esp
+	pushl	%esi
+	pushl	%edi
+	pushl	$1
+	pushl	%edi
+	pushl	$15
+	pushl	%ebx
+	pushl	8(%ebp)
+	call	_boxfill8
+	pushl	-24(%ebp)
+	pushl	-20(%ebp)
+	pushl	$0
+	pushl	-20(%ebp)
+	pushl	$1
+	pushl	%ebx
+	pushl	8(%ebp)
+	call	_boxfill8
+	movl	16(%ebp), %eax
+	addl	$56, %esp
+	subl	$3, %eax
+	pushl	%eax
+	leal	-3(%ebx), %eax
+	pushl	%eax
+	pushl	$2
+	pushl	$2
+	pushl	$8
+	pushl	%ebx
+	pushl	8(%ebp)
+	call	_boxfill8
+	leal	-4(%ebx), %eax
+	pushl	$20
+	pushl	%eax
+	pushl	$3
+	pushl	$3
+	pushl	$7
+	pushl	%ebx
+	pushl	8(%ebp)
+	call	_boxfill8
+	addl	$56, %esp
+	pushl	%esi
+	pushl	%edi
+	xorl	%edi, %edi
+	pushl	%esi
+	pushl	$1
+	pushl	$15
+	pushl	%ebx
+	pushl	8(%ebp)
+	call	_boxfill8
+	pushl	-24(%ebp)
+	pushl	-20(%ebp)
+	pushl	-24(%ebp)
+	pushl	$0
+	pushl	$7
+	pushl	%ebx
+	pushl	8(%ebp)
+	call	_boxfill8
+	addl	$56, %esp
+	pushl	20(%ebp)
+	pushl	$0
+	pushl	$4
+	pushl	$24
+	pushl	%ebx
+	pushl	8(%ebp)
+	call	_putstr8_asc
+	addl	$24, %esp
+	imull	$5, %ebx, %ecx
+	movl	$0, -16(%ebp)
+L53:
+	leal	(%ecx,%ebx), %edx
+	movl	8(%ebp), %eax
+	xorl	%esi, %esi
+	leal	-21(%eax,%edx), %edx
+L52:
+	movb	_closebtn.0(%esi,%edi), %al
+	cmpb	$64, %al
+	je	L50
+	cmpb	$36, %al
+	je	L58
+	cmpb	$81, %al
+	je	L59
+L50:
+	movb	$7, %al
+L47:
+	incl	%esi
+	movb	%al, (%edx)
+	incl	%edx
+	cmpl	$15, %esi
+	jle	L52
+	incl	-16(%ebp)
+	addl	%ebx, %ecx
+	addl	$16, %edi
+	cmpl	$13, -16(%ebp)
+	jle	L53
+	leal	-12(%ebp), %esp
+	popl	%ebx
+	popl	%esi
+	popl	%edi
+	popl	%ebp
+	ret
+L59:
+	movb	$1, %al
+	jmp	L47
+L58:
+	movb	$15, %al
+	jmp	L47
+	.balign 2
+.globl _putfont8_sht
+	.def	_putfont8_sht;	.scl	2;	.type	32;	.endef
+_putfont8_sht:
+	pushl	%ebp
+	movl	%esp, %ebp
+	pushl	%edi
+	pushl	%esi
+	pushl	%ebx
+	subl	$12, %esp
+	movl	16(%ebp), %ebx
+	movl	20(%ebp), %eax
+	movl	12(%ebp), %edi
+	movl	32(%ebp), %edx
+	movl	%eax, -16(%ebp)
+	movl	8(%ebp), %esi
+	movl	28(%ebp), %eax
+	movl	%eax, -20(%ebp)
+	leal	15(%ebx), %eax
+	pushl	%eax
+	leal	(%edi,%edx,8), %eax
+	movl	%eax, -24(%ebp)
+	subl	%edx, %eax
+	pushl	%eax
+	pushl	%ebx
+	pushl	%edi
+	movzbl	24(%ebp), %eax
+	pushl	%eax
+	pushl	4(%esi)
+	pushl	(%esi)
+	call	_boxfill8
+	pushl	-20(%ebp)
+	pushl	-16(%ebp)
+	pushl	%ebx
+	pushl	%edi
+	pushl	4(%esi)
+	pushl	(%esi)
+	call	_putstr8_asc
+	movl	%esi, 8(%ebp)
+	leal	16(%ebx), %eax
+	movl	%ebx, 16(%ebp)
+	movl	%eax, 24(%ebp)
+	movl	%edi, 12(%ebp)
+	movl	-24(%ebp), %eax
+	addl	$52, %esp
+	movl	%eax, 20(%ebp)
+	leal	-12(%ebp), %esp
+	popl	%ebx
+	popl	%esi
+	popl	%edi
+	popl	%ebp
+	jmp	_sheet_refresh
+	.def	_init_pit;	.scl	2;	.type	32;	.endef
 	.def	_init_pic;	.scl	2;	.type	32;	.endef
 	.def	_init_gdtidt;	.scl	2;	.type	32;	.endef
 	.def	_memman_free;	.scl	2;	.type	32;	.endef
@@ -326,27 +657,33 @@ L22:
 	.def	_memtest;	.scl	2;	.type	32;	.endef
 	.def	_MouseCoodinateThreshold;	.scl	2;	.type	32;	.endef
 	.def	_mouse_decode;	.scl	2;	.type	32;	.endef
-	.def	_get_mouse_data;	.scl	2;	.type	32;	.endef
+	.def	_putfont8_sht;	.scl	2;	.type	32;	.endef
 	.def	_io_sti;	.scl	2;	.type	32;	.endef
-	.def	_get_keybord_data;	.scl	2;	.type	32;	.endef
+	.def	_fifo32_get;	.scl	2;	.type	32;	.endef
 	.def	_io_stihlt;	.scl	2;	.type	32;	.endef
-	.def	_mouse_data_num;	.scl	2;	.type	32;	.endef
-	.def	_keybord_data_num;	.scl	2;	.type	32;	.endef
+	.def	_fifo32_status;	.scl	2;	.type	32;	.endef
 	.def	_io_cli;	.scl	2;	.type	32;	.endef
 	.def	_sheet_refresh;	.scl	2;	.type	32;	.endef
 	.def	_putstr8_asc;	.scl	2;	.type	32;	.endef
 	.def	_memman_total;	.scl	2;	.type	32;	.endef
 	.def	_sprintf;	.scl	2;	.type	32;	.endef
+	.def	_sheet_updown;	.scl	2;	.type	32;	.endef
 	.def	_sheet_slide;	.scl	2;	.type	32;	.endef
+	.def	_makeWindow8;	.scl	2;	.type	32;	.endef
 	.def	_init_mouse_cursol;	.scl	2;	.type	32;	.endef
 	.def	_boxfill8;	.scl	2;	.type	32;	.endef
-	.def	_sheet_updown;	.scl	2;	.type	32;	.endef
 	.def	_sheet_setbuf;	.scl	2;	.type	32;	.endef
 	.def	_memman_alloc_4k;	.scl	2;	.type	32;	.endef
 	.def	_sheet_alloc;	.scl	2;	.type	32;	.endef
 	.def	_shtctl_init;	.scl	2;	.type	32;	.endef
 	.def	_init_palette;	.scl	2;	.type	32;	.endef
-	.def	_enable_mouse;	.scl	2;	.type	32;	.endef
-	.def	_hardWareInit;	.scl	2;	.type	32;	.endef
+	.def	_timer_settime;	.scl	2;	.type	32;	.endef
+	.def	_timer_init;	.scl	2;	.type	32;	.endef
+	.def	_timer_alloc;	.scl	2;	.type	32;	.endef
 	.def	_memoryUsage;	.scl	2;	.type	32;	.endef
 	.def	_memoryInit;	.scl	2;	.type	32;	.endef
+	.def	_io_out8;	.scl	2;	.type	32;	.endef
+	.def	_enable_mouse;	.scl	2;	.type	32;	.endef
+	.def	_init_keyboard;	.scl	2;	.type	32;	.endef
+	.def	_fifo32_init;	.scl	2;	.type	32;	.endef
+	.def	_hardWareInit;	.scl	2;	.type	32;	.endef

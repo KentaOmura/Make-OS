@@ -12,8 +12,8 @@
     12 00000000                                 		GLOBAL	_load_gdtr, _load_idtr
     13 00000000                                 		GLOBAL	_load_cr0, _store_cr0
     14 00000000                                 		GLOBAL	_memtest_sub
-    15 00000000                                 		GLOBAL	_asm_inthandler21,_asm_inthandler2c,_asm_inthandler27
-    16 00000000                                 		EXTERN	_inthandler21, _inthandler2c, _inthandler27
+    15 00000000                                 		GLOBAL	_asm_inthandler21,_asm_inthandler2c,_asm_inthandler27,_asm_inthandler20
+    16 00000000                                 		EXTERN	_inthandler21, _inthandler2c, _inthandler27,_inthandler20
     17 00000000                                 
     18                                          [SECTION .text]
     19 00000000                                 
@@ -160,3 +160,19 @@
    160 000000D8 1F                              		POP		DS
    161 000000D9 07                              		POP		ES
    162 000000DA CF                              		IRETD
+   163 000000DB                                 		
+   164 000000DB                                 _asm_inthandler20:
+   165 000000DB 06                              		PUSH	ES
+   166 000000DC 1E                              		PUSH	DS
+   167 000000DD 60                              		PUSHAD
+   168 000000DE 89 E0                           		MOV		EAX, ESP
+   169 000000E0 50                              		PUSH	EAX
+   170 000000E1 66 8C D0                        		MOV		AX, SS ; C言語の関数をコールする時は、SSレジスタに格納されている値にDSとESを合わせておく必要がある。
+   171 000000E4 8E D8                           		MOV		DS, AX
+   172 000000E6 8E C0                           		MOV		ES, AX
+   173 000000E8 E8 [00000000]                   		CALL	_inthandler20
+   174 000000ED 58                              		POP		EAX
+   175 000000EE 61                              		POPAD	
+   176 000000EF 1F                              		POP		DS
+   177 000000F0 07                              		POP		ES
+   178 000000F1 CF                              		IRETD

@@ -49,6 +49,7 @@ int io_load_eflags(void);
 void io_store_eflags(int eflags);
 void load_gdtr(int limit, int address);
 void load_idtr(int limit, int address);
+void asm_inthandler20(void);
 void asm_inthandler21(void);
 void asm_inthandler27(void);
 void asm_inthandler2c(void);
@@ -74,11 +75,6 @@ void init_pic(void);
 void inthandler21(void);
 void inthandler2c(void);
 void inthandler27(void);
-void init_keybuf(void);
-unsigned int keybord_data_num(void);
-unsigned int mouse_data_num(void);
-unsigned char get_keybord_data(void);
-unsigned char get_mouse_data(void);
 
 /* memory.cの定義 */
 #define MEMMAN_FREES 4090 /* 約32MB */
@@ -102,6 +98,20 @@ unsigned int memman_alloc_4k(struct MEMMAN *man, unsigned int size);
 int memman_free_4k(struct MEMMAN *man, unsigned int addr, unsigned int size);
 
 
+/* fifo.cの定義 */
+#define FLAGS_OVERRUN -1
+
+/* キュー構造体 */
+struct FIFO32 
+{
+	int *buf;
+	int p, q, size, free, flags;
+};
+unsigned int fifo32_status(struct FIFO32* fifo);
+int fifo32_get(struct FIFO32 *fifo);
+int fifo32_put(struct FIFO32 *fifo, int data);
+void fifo32_init(struct FIFO32 *fifo, int size, int *buf);
+
 /* mouse.cの定義 */
 /*
 	マウス解析構造体
@@ -117,7 +127,7 @@ struct MOUSE_DEC
 };
 
 int mouse_decode(struct MOUSE_DEC *mdec, unsigned char data);
-void enable_mouse(struct MOUSE_DEC *mdec);
+void enable_mouse(struct FIFO32 *fifo, int data0,struct MOUSE_DEC *mdec);
 
 /* keybord.cの定義 */
 
@@ -129,7 +139,7 @@ void enable_mouse(struct MOUSE_DEC *mdec);
 #define KBC_MODE				0x47
 
 void wait_KBC_sendready(void);
-void init_keyboard(void);
+void init_keyboard(struct FIFO32 *fifo, int data0);
 
 #define PIC0_ICW1		0x0020
 #define PIC0_OCW2		0x0020
@@ -144,39 +154,19 @@ void init_keyboard(void);
 #define PIC1_ICW3		0x00a1
 #define PIC1_ICW4		0x00a1
 
-
-/* fifo.cの定義 */
-#define FIFO_MAX 32
-
-/* キュー構造体 */
-struct FIFO
-{
-	unsigned char data[FIFO_MAX];
-	unsigned int wcounter;
-	unsigned int rcounter;
-	unsigned int fsize;
-	unsigned int frees;
-};
-
-unsigned int fifo_status(struct FIFO* fifo);
-void fifo_put(struct FIFO* fifo, unsigned char data);
-void init_fifo(struct FIFO* fifo);
-unsigned char fifo_get(struct FIFO* fifo);
-
-
-
 /* sheet.cの定義 */
 struct SHEET 
 {
 	unsigned char *buf;
 	int bxsize, bysize, vx0, vy0, col_inv, height, flags;
+	struct SHTCTL *ctl;
 };
 
 #define MAX_SHEETS 256
 #define SHEET_USE 1
 struct SHTCTL
 {
-	unsigned char *vram;
+	unsigned char *vram, *map;
 	int xsize, ysize, top;
 	struct SHEET *sheets[MAX_SHEETS];
 	struct SHEET sheets0[MAX_SHEETS];
@@ -185,8 +175,36 @@ struct SHTCTL
 struct SHTCTL *shtctl_init(struct MEMMAN *man, unsigned char *vram, int xsize, int ysize);
 struct SHEET *sheet_alloc(struct SHTCTL *ctl);
 void sheet_setbuf(struct SHEET *sht, unsigned char *buf, int xsize, int ysize, int col_inv);
-void sheet_updown(struct SHTCTL *ctl, struct SHEET *sht, int height);
-void sheet_refreshsub(struct SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1);
-void sheet_refresh(struct SHEET *ctl, struct SHEET *sht, int bx0, int by0, int bx1, int by1);
-void sheet_slide(struct SHTCTL *ctl, struct SHEET *sht, int vx0, int vy0);
-void sheet_free(struct SHTCTL *ctl, struct SHEET *sht);
+void sheet_updown(struct SHEET *sht, int height);
+void sheet_refreshmap(struct SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1, int h0);
+void sheet_refreshsub(struct SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1, int h0, int h1);
+void sheet_refresh(struct SHEET *sht, int bx0, int by0, int bx1, int by1);
+void sheet_slide(struct SHEET *sht, int vx0, int vy0);
+void sheet_free(struct SHEET *sht);
+
+
+
+/* timer,cの定義 */
+#define MAX_TIMER 500
+
+struct TIMER
+{
+	struct TIMER *next;
+	unsigned int timeout, flags;
+	struct FIFO32 *fifo;
+	int data;
+};
+struct TIMERCTL
+{
+	unsigned int count, next;
+	struct TIMER *t0;
+	struct TIMER timers0[MAX_TIMER];
+};
+
+extern struct TIMERCTL timerctl;
+void timer_reset(void);
+void init_pit(void);
+void timer_settime(struct TIMER *timer, unsigned int timeout);
+struct TIMER *timer_alloc(void);
+void timer_free(struct TIMER *timer);
+void timer_init(struct TIMER *timer, struct FIFO32 *fifo, unsigned char data);
