@@ -48,7 +48,7 @@ void HariMain(void)
 	struct MOUSE_COODINATE mouseCoodinate; 
 	unsigned char *buf_back, buf_mouse[256], *buf_win;
 	int i;
-	struct TIMER *timer, *timer2, *timer3;
+	struct TIMER *timer;
 	int cursor_x, cursor_c;
 	int maxch;
 	int count = 0;
@@ -78,14 +78,8 @@ void HariMain(void)
 	memoryInit(memman, memoryUsage(memman));
 	
 	timer = timer_alloc();
-	timer_init(timer, &fifo, 10);
-	timer_settime(timer, 1000); /* 1秒間に100回割り込みが発生するので、1000回割り込みで10秒となる */
-	timer2 = timer_alloc();
-	timer_init(timer2, &fifo, 3);
-	timer_settime(timer2, 300);
-	timer3 = timer_alloc();
-	timer_init(timer3, &fifo, 1);
-	timer_settime(timer3, 50);
+	timer_init(timer, &fifo, 1);
+	timer_settime(timer, 50);
 	
 	init_palette();
 	
@@ -194,27 +188,19 @@ void HariMain(void)
 					}
 				}
 			}
-			else if(10 == i)
-			{
-				putfont8_sht(sht_back, 0, 64, COL8_FFFFFF, COL8_0000FF, "10[sec]", 7);
-			}
-			else if(3 == i)
-			{
-				putfont8_sht(sht_back, 0, 80, COL8_FFFFFF, COL8_0000FF, "3[sec]", 6);
-			}
 			else
 			{
 				if(i != 0)
 				{
-					timer_init(timer3, &fifo, 0);
+					timer_init(timer, &fifo, 0);
 					cursor_c = COL8_000000;
 				}
 				else
 				{
-					timer_init(timer3, &fifo, 1);
+					timer_init(timer, &fifo, 1);
 					cursor_c = COL8_FFFFFF;
 				}
-				timer_settime(timer3, 50);
+				timer_settime(timer, 50);
 				boxfill8(sht_win->buf, sht_win->bxsize, cursor_c, cursor_x, 28, cursor_x + 8, 44);
 				sheet_refresh(sht_win, cursor_x, 28, cursor_x + 8, 44);
 			}
@@ -356,19 +342,11 @@ void putfont8_sht(struct SHEET *sht, int x, int y, int c, int b, char *s, int l)
 void task_b_main(struct SHEET *sht_back)
 {
 	struct FIFO32 fifo;
-	struct TIMER *timer_st, *timer1, *timer_ls;
+	struct TIMER *timer_ls;
 	int i, fifobuf[128], count = 0, count0 = 0;
 	char s[11];
 	
 	fifo32_init(&fifo, 128, fifobuf, 0);
-	timer_st = timer_alloc();
-	timer_init(timer_st, &fifo, 2);
-	timer_settime(timer_st, 2);
-	
-	/* コンソールに表示 */
-	timer1 = timer_alloc();
-	timer_init(timer1, &fifo, 1);
-	timer_settime(timer1, 1);
 	
 	/* 計測 */
 	timer_ls = timer_alloc();
@@ -387,15 +365,7 @@ void task_b_main(struct SHEET *sht_back)
 		{
 			i = fifo32_get(&fifo);
 			io_sti();
-			if(1 == i)
-			{
-				timer_settime(timer1, 1);
-			}
-			else if(2 == i)
-			{
-				timer_settime(timer_st, 2);
-			}
-			else if(100 == i)
+			if(100 == i)
 			{
 				sprintf(s, "%10d", count - count0);
 				putfont8_sht(sht_back, 0, 160, COL8_FFFFFF, COL8_0000FF, s, 10);
