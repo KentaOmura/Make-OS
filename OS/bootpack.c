@@ -24,7 +24,7 @@ void memoryInit(struct MEMMAN *man, unsigned int memtotal);
 void hardWareInit(void);
 /* マウス座標が閾値を超えていれば丸め込む */
 void MouseCoodinateThreshold(struct MOUSE_COODINATE *mc, unsigned int screen_max_x, unsigned int screen_max_y);
-void makeWindow8(unsigned char* buf, int xsize, int ysize, char *title);
+void makeWindow8(unsigned char* buf, int xsize, int ysize, char *title, int act);
 
 void putfont8_sht(struct SHEET *sht, int x, int y, int c, int b, char *s, int l);
 
@@ -44,9 +44,9 @@ void HariMain(void)
 	struct SCREEN_INFO *binfo = (struct SCREEN_INFO*)0x0ff4;
 	/* シート */
 	struct SHTCTL *shtctl;
-	struct SHEET *sht_back, *sht_mouse, *sht_win;
+	struct SHEET *sht_back, *sht_mouse, *sht_win, *sht_win_b[3];
 	struct MOUSE_COODINATE mouseCoodinate; 
-	unsigned char *buf_back, buf_mouse[256], *buf_win;
+	unsigned char *buf_back, buf_mouse[256], *buf_win, *buf_win_b;
 	int i;
 	struct TIMER *timer;
 	int cursor_x, cursor_c;
@@ -54,7 +54,7 @@ void HariMain(void)
 	int count = 0;
 	struct TSS32 tss_a, tss_b;
 	struct SEGMENT_DESCRIPTOR *gdt = (struct SEGMENT_DESCRIPTOR *)0x00270000;
-	struct TASK *task_b, *task_a;
+	struct TASK *task_b[3], *task_a;
 	
 	static char keytable[0x54] = {
 		0,   0,   '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '^', 0,   0,
@@ -77,58 +77,75 @@ void HariMain(void)
 	
 	memoryInit(memman, memoryUsage(memman));
 	
-	timer = timer_alloc();
-	timer_init(timer, &fifo, 1);
-	timer_settime(timer, 50);
-	
 	init_palette();
-	
 	shtctl = shtctl_init(memman, binfo->vram, binfo->screen_x, binfo->screen_y);
+	task_a = task_init(memman);
+	fifo.task = task_a;
+	
+	/* sht_back */
 	sht_back = sheet_alloc(shtctl);
-	sht_mouse = sheet_alloc(shtctl);
-	sht_win = sheet_alloc(shtctl);
 	buf_back = (unsigned char*)memman_alloc_4k(memman, binfo->screen_x * binfo->screen_y);
-	buf_win = (unsigned char*)memman_alloc_4k(memman, 160*68);
 	sheet_setbuf(sht_back, buf_back, binfo->screen_x , binfo->screen_y, -1);
-	sheet_setbuf(sht_mouse, buf_mouse, 8, 8, COL8_0000FF);
-	sheet_setbuf(sht_win, buf_win, 160, 68, 88);	
 	/* 背景画面を描画する（青一色） */
 	boxfill8(buf_back, binfo->screen_x, COL8_0000FF, 0, 0, binfo->screen_x, binfo->screen_y);
-	/* マウスカーソルのデータを取得 */
-	init_mouse_cursol(buf_mouse, COL8_0000FF);
-	
-	makeWindow8(buf_win, 160, 68, "Window");
-	makeTextbox8(sht_win, 8, 28, 144, 16, COL8_FFFFFF);
-	maxch = (144 - 8) / 8; /* 最大文字数 */
-	cursor_x = 8;
-	cursor_c = COL8_FFFFFF;
 
 	/* taskBに引数として値を渡す為に、8引く */
 	/* 下の式は、スタックであるtask_b_espに64KBのメモリを確保し、最後に64*1024を実施する事で、使用できるメモリの終端番地を指す事になる */
 	/* 最後に8を引くのは、taskBに引数を渡す為である。引数はESP+4に格納される事がC言語の決まりになっている。その決まりの為-4では確保したメモリを超える事になる。よって8 */
-	task_a = task_init(memman);
-	fifo.task = task_a;
-	task_b = task_alloc();
-	task_b->tss.esp = memman_alloc_4k(memman, 64 * 1024) + 64 * 1024 - 8;
-	task_b->tss.eip = (int)&task_b_main;
-	task_b->tss.es = 1 * 8;
-	task_b->tss.cs = 2 * 8;
-	task_b->tss.ss = 1 * 8;
-	task_b->tss.ds = 1 * 8;
-	task_b->tss.fs = 1 * 8;
-	task_b->tss.gs = 1 * 8;
-	*((int *) (task_b->tss.esp + 4)) = (int)sht_back;
-	task_run(task_b);
+	for(i = 0; i < 3; i++)
+	{
+		sht_win_b[i] = sheet_alloc(shtctl);
+		buf_win_b = (unsigned char*)memman_alloc_4k(memman, 144 * 52);
+		sheet_setbuf(sht_win_b[i], buf_win_b, 144, 52, -1);
+		sprintf(s, "task_b%d", i);
+		makeWindow8(buf_win_b, 144,52,s, 0);
+		task_b[i] = task_alloc();
+		task_b[i]->tss.esp = memman_alloc_4k(memman, 64 * 1024) + 64 * 1024 - 8;
+		task_b[i]->tss.eip = (int)&task_b_main;
+		task_b[i]->tss.es = 1 * 8;
+		task_b[i]->tss.cs = 2 * 8;
+		task_b[i]->tss.ss = 1 * 8;
+		task_b[i]->tss.ds = 1 * 8;
+		task_b[i]->tss.fs = 1 * 8;
+		task_b[i]->tss.gs = 1 * 8;
+		*((int *) (task_b[i]->tss.esp + 4)) = (int)sht_win_b[i];
+		task_run(task_b[i]);
+	}
 	
-	sheet_slide(sht_back, 0, 0);
+	sht_win = sheet_alloc(shtctl);
+	buf_win = (unsigned char*)memman_alloc_4k(memman, 160*68);
+	sheet_setbuf(sht_win, buf_win, 160, 68, 88);	
+	makeWindow8(buf_win, 160,68,"task_a", 1);
+	makeTextbox8(sht_win, 8, 28, 144, 16, COL8_FFFFFF);
+
+	sht_mouse = sheet_alloc(shtctl);
+	sheet_setbuf(sht_mouse, buf_mouse, 8, 8, COL8_0000FF);
+	/* マウスカーソルのデータを取得 */
+	init_mouse_cursol(buf_mouse, COL8_0000FF);
+	maxch = (144 - 8) / 8; /* 最大文字数 */
+	cursor_x = 8;
+	cursor_c = COL8_FFFFFF;
+	
+	timer = timer_alloc();
+	timer_init(timer, &fifo, 1);
+	timer_settime(timer, 50);
+	
 	/* マウスカーソルを描画する */
 	mouseCoodinate.mx = (binfo->screen_x - 8) / 2;
 	mouseCoodinate.my = (binfo->screen_y -28 - 8) / 2;
+	
+	sheet_slide(sht_back, 0, 0);
+	sheet_slide(sht_win_b[0], 320,56);
+	sheet_slide(sht_win_b[1], 8,116);
+	sheet_slide(sht_win_b[2], 168,116);
 	sheet_slide(sht_mouse, mouseCoodinate.mx, mouseCoodinate.my);
 	sheet_slide(sht_win, 80, 72);
 	sheet_updown(sht_back, 0);
-	sheet_updown(sht_win, 1);
-	sheet_updown(sht_mouse, 2);
+	sheet_updown(sht_win_b[0], 1);
+	sheet_updown(sht_win_b[1], 2);
+	sheet_updown(sht_win_b[2], 3);
+	sheet_updown(sht_win, 4);
+	sheet_updown(sht_mouse, 5);
 	
 	sprintf(s, "memory %dMB  free : %dKB", memman->storage / (1024 * 1024), memman_total(memman) / 1024);
 	putstr8_asc(buf_back, binfo->screen_x, 0, 48, COL8_FFFFFF, s);
@@ -278,7 +295,7 @@ void makeTextbox8(struct SHEET *sht, int x0, int y0, int sx, int sy, int c)
 	return;
 }
 
-void makeWindow8(unsigned char* buf, int xsize, int ysize, char *title)
+void makeWindow8(unsigned char* buf, int xsize, int ysize, char *title, int act)
 {
 	static char closebtn[14][16] = {
 		"OOOOOOOOOOOOOOO@",
@@ -297,7 +314,18 @@ void makeWindow8(unsigned char* buf, int xsize, int ysize, char *title)
 		"@@@@@@@@@@@@@@@@"
 	};
 	int x, y;
-	char c;
+	char c, tc, tbc;
+	if(act != 0)
+	{
+		tc = COL8_000000;
+		tbc = COL8_FFFFFF;
+	}
+	else
+	{
+		tc = COL8_FFFFFF;
+		tbc = COL8_000000;
+	}
+	
 	boxfill8(buf, xsize, COL8_C6C6C6, 0,         0,         xsize - 1, 0        );
 	boxfill8(buf, xsize, COL8_FFFFFF, 1,         1,         xsize - 2, 1        );
 	boxfill8(buf, xsize, COL8_C6C6C6, 0,         0,         0,         ysize - 1);
@@ -306,11 +334,11 @@ void makeWindow8(unsigned char* buf, int xsize, int ysize, char *title)
 	boxfill8(buf, xsize, COL8_FF0000, xsize - 1, 0,         xsize - 1, ysize - 1);
 	
 	boxfill8(buf, xsize, COL8_C6C6C6, 2,         2,         xsize - 3, ysize - 3);
-	boxfill8(buf, xsize, COL8_FFFFFF, 3,         3,         xsize - 4, 20       );
+	boxfill8(buf, xsize, tbc, 3,         3,         xsize - 4, 20       );
 	
 	boxfill8(buf, xsize, COL8_848484, 1,         ysize - 2, xsize - 2, ysize - 2);
 	boxfill8(buf, xsize, COL8_FFFFFF, 0,         ysize - 1, xsize - 1, ysize - 1);
-	putstr8_asc(buf, xsize, 24, 4, COL8_000000, title);
+	putstr8_asc(buf, xsize, 24, 4, tc, title);
 	for (y = 0; y < 14; y++) {
 		for (x = 0; x < 16; x++) {
 			c = closebtn[y][x];
@@ -368,7 +396,7 @@ void task_b_main(struct SHEET *sht_back)
 			if(100 == i)
 			{
 				sprintf(s, "%10d", count - count0);
-				putfont8_sht(sht_back, 0, 160, COL8_FFFFFF, COL8_0000FF, s, 10);
+				putfont8_sht(sht_back, 24, 28, COL8_000000, COL8_C6C6C6, s, 11);
 				count0 = count;
 				timer_settime(timer_ls, 100);
 			}
