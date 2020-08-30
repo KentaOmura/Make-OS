@@ -13,166 +13,174 @@
     13 00000000                                 		GLOBAL	_load_cr0, _store_cr0
     14 00000000                                 		GLOBAL	_memtest_sub
     15 00000000                                 		GLOBAL	_asm_inthandler21,_asm_inthandler2c,_asm_inthandler27,_asm_inthandler20
-    16 00000000                                 		EXTERN	_inthandler21, _inthandler2c, _inthandler27,_inthandler20
-    17 00000000                                 
-    18                                          [SECTION .text]
-    19 00000000                                 
-    20 00000000                                 _io_hlt:	; void io_hlt(void);
-    21 00000000 F4                              		HLT
-    22 00000001 C3                              		RET
-    23 00000002                                 
-    24 00000002                                 _io_cli:
-    25 00000002 FA                              		CLI
-    26 00000003 C3                              		RET
-    27 00000004                                 
-    28 00000004                                 _io_sti:
-    29 00000004 FB                              		STI
-    30 00000005 C3                              		RET
-    31 00000006                                 
-    32 00000006                                 _io_stihlt:
-    33 00000006 FB                              		STI
-    34 00000007 F4                              		HLT
-    35 00000008 C3                              		RET
-    36 00000009                                 
-    37 00000009                                 _io_in8:	; int io_in8(int port);
-    38 00000009 8B 54 24 04                     		MOV		EDX,[ESP+4]		; port
-    39 0000000D B8 00000000                     		MOV		EAX,0
-    40 00000012 EC                              		IN		AL,DX
-    41 00000013 C3                              		RET
-    42 00000014                                 
-    43 00000014                                 _io_out8:
-    44 00000014 8B 54 24 04                     		MOV		EDX, [ESP+4]
-    45 00000018 8A 44 24 08                     		MOV		AL, [ESP+8] ;8bit用だからALを使用している
-    46 0000001C EE                              		OUT		DX, AL
-    47 0000001D C3                              		RET
-    48 0000001E                                 		
-    49 0000001E                                 _io_load_eflags:
-    50 0000001E 9C                              		PUSHFD
-    51 0000001F 58                              		POP		EAX
-    52 00000020 C3                              		RET
-    53 00000021                                 		
-    54 00000021                                 _io_store_eflags:
-    55 00000021 8B 44 24 04                     		MOV		EAX, [ESP+4]
-    56 00000025 50                              		PUSH	EAX
-    57 00000026 9D                              		POPFD
-    58 00000027 C3                              		RET
-    59 00000028                                 
-    60 00000028                                 _load_cr0: ; int load_cr0(void)
-    61 00000028 0F 20 C0                        		MOV		EAX, CR0
-    62 0000002B C3                              		RET
-    63 0000002C                                 
-    64 0000002C                                 _store_cr0: ;void store_cr0(int cr0)
-    65 0000002C 8B 44 24 04                     		MOV		EAX, [ESP+4]
-    66 00000030 0F 22 C0                        		MOV		CR0, EAX
-    67 00000033 C3                              		RET
-    68 00000034                                 
-    69 00000034                                 _load_gdtr:
-    70 00000034 66 8B 44 24 04                  		MOV		AX, [ESP+4] ; limitは16bitで表現できる
-    71 00000039 66 89 44 24 06                  		MOV		[ESP+6], AX ; addressは32bitでESP+8から格納されている。CPUがリトルエンディアンなのでこれで良い。
-    72 0000003E 0F 01 54 24 06                  		LGDT	[ESP+6]
-    73 00000043 C3                              		RET
-    74 00000044                                 
-    75 00000044                                 _load_idtr: ;GDTと同じ
-    76 00000044 66 8B 44 24 04                  		MOV		AX, [ESP+4]
-    77 00000049 66 89 44 24 06                  		MOV		[ESP+6], AX
-    78 0000004E 0F 01 5C 24 06                  		LIDT	[ESP+6]
-    79 00000053 C3                              		RET
-    80 00000054                                 
-    81 00000054                                 _memtest_sub: ; unsigned int memtest_sub(unsigned int start, unsigned int end)
-    82 00000054 57                              		PUSH	EDI
-    83 00000055 56                              		PUSH	ESI
-    84 00000056 53                              		PUSH	EBX
-    85 00000057 BE AA55AA55                     		MOV		ESI, 0xaa55aa55 ;pat0 = 0xaa55aa55
-    86 0000005C BF 55AA55AA                     		MOV		EDI, 0x55aa55aa ;pat1 = 0x55aa55aa
-    87 00000061 8B 44 24 10                     		MOV		EAX, [ESP+12+4] ;i = start PUSHを3回実施しているので、スタックポインタは4 * 3の12バイト進んでいる
-    88 00000065                                 
-    89 00000065                                 mts_loop:
-    90 00000065 89 C3                           		MOV		EBX, EAX
-    91 00000067 81 C3 00000FFC                  		ADD		EBX, 0xffc  ; p = i + 0xffc
-    92 0000006D 8B 13                           		MOV		EDX, [EBX]  ; old = *p
-    93 0000006F 89 33                           		MOV		[EBX], ESI  ; *p = pat0
-    94 00000071 83 33 FF                        		XOR		DWORD [EBX], 0xffffffff ;*p ^= 0xffffffff
-    95 00000074 3B 3B                           		CMP		EDI, [EBX]	;if(*p != pat1) goto fin
-    96 00000076 75 18                           		JNE		mts_fin
-    97 00000078 83 33 FF                        		XOR		DWORD [EBX], 0xffffffff ;*p ^= 0xffffffff
-    98 0000007B 3B 33                           		CMP		ESI, [EBX]  ;if(*p != pat0) goto fin
-    99 0000007D 75 11                           		JNE		mts_fin
-   100 0000007F 89 13                           		MOV		[EBX], EDX	; *p = old
-   101 00000081 05 00001000                     		ADD		EAX, 0x1000	;i += 0x1000
-   102 00000086 3B 44 24 14                     		CMP		EAX, [ESP+12+8] ; if(i <= end) goto mts_loop
-   103 0000008A 75 D9                           		JNE		mts_loop
-   104 0000008C 5B                              		POP		EBX
-   105 0000008D 5E                              		POP		ESI
-   106 0000008E 5F                              		POP		EDI
-   107 0000008F C3                              		RET
-   108 00000090                                 		
-   109 00000090                                 mts_fin:
-   110 00000090 89 13                           		MOV		[EBX], EDX ; *p = old
-   111 00000092 5B                              		POP		EBX
-   112 00000093 5E                              		POP		ESI
-   113 00000094 5F                              		POP		EDI
-   114 00000095 C3                              		RET
-   115 00000096                                 		
-   116 00000096                                 _asm_inthandler21:
-   117 00000096 06                              		PUSH	ES
-   118 00000097 1E                              		PUSH	DS
-   119 00000098 60                              		PUSHAD
-   120 00000099 89 E0                           		MOV		EAX, ESP
-   121 0000009B 50                              		PUSH	EAX
-   122 0000009C 66 8C D0                        		MOV		AX, SS ; C言語の関数をコールする時は、SSレジスタに格納されている値にDSとESを合わせておく必要がある。
-   123 0000009F 8E D8                           		MOV		DS, AX
-   124 000000A1 8E C0                           		MOV		ES, AX
-   125 000000A3 E8 [00000000]                   		CALL	_inthandler21
-   126 000000A8 58                              		POP		EAX
-   127 000000A9 61                              		POPAD	
-   128 000000AA 1F                              		POP		DS
-   129 000000AB 07                              		POP		ES
-   130 000000AC CF                              		IRETD
-   131 000000AD                                 		
-   132 000000AD                                 _asm_inthandler2c:
-   133 000000AD 06                              		PUSH	ES
-   134 000000AE 1E                              		PUSH	DS
-   135 000000AF 60                              		PUSHAD
-   136 000000B0 89 E0                           		MOV		EAX, ESP
-   137 000000B2 50                              		PUSH	EAX
-   138 000000B3 66 8C D0                        		MOV		AX, SS ; C言語の関数をコールする時は、SSレジスタに格納されている値にDSとESを合わせておく必要がある。
-   139 000000B6 8E D8                           		MOV		DS, AX
-   140 000000B8 8E C0                           		MOV		ES, AX
-   141 000000BA E8 [00000000]                   		CALL	_inthandler2c
-   142 000000BF 58                              		POP		EAX
-   143 000000C0 61                              		POPAD	
-   144 000000C1 1F                              		POP		DS
-   145 000000C2 07                              		POP		ES
-   146 000000C3 CF                              		IRETD
-   147 000000C4                                 		
-   148 000000C4                                 _asm_inthandler27:
-   149 000000C4 06                              		PUSH	ES
-   150 000000C5 1E                              		PUSH	DS
-   151 000000C6 60                              		PUSHAD
-   152 000000C7 89 E0                           		MOV		EAX, ESP
-   153 000000C9 50                              		PUSH	EAX
-   154 000000CA 66 8C D0                        		MOV		AX, SS ; C言語の関数をコールする時は、SSレジスタに格納されている値にDSとESを合わせておく必要がある。
-   155 000000CD 8E D8                           		MOV		DS, AX
-   156 000000CF 8E C0                           		MOV		ES, AX
-   157 000000D1 E8 [00000000]                   		CALL	_inthandler27
-   158 000000D6 58                              		POP		EAX
-   159 000000D7 61                              		POPAD	
-   160 000000D8 1F                              		POP		DS
-   161 000000D9 07                              		POP		ES
-   162 000000DA CF                              		IRETD
-   163 000000DB                                 		
-   164 000000DB                                 _asm_inthandler20:
-   165 000000DB 06                              		PUSH	ES
-   166 000000DC 1E                              		PUSH	DS
-   167 000000DD 60                              		PUSHAD
-   168 000000DE 89 E0                           		MOV		EAX, ESP
-   169 000000E0 50                              		PUSH	EAX
-   170 000000E1 66 8C D0                        		MOV		AX, SS ; C言語の関数をコールする時は、SSレジスタに格納されている値にDSとESを合わせておく必要がある。
-   171 000000E4 8E D8                           		MOV		DS, AX
-   172 000000E6 8E C0                           		MOV		ES, AX
-   173 000000E8 E8 [00000000]                   		CALL	_inthandler20
-   174 000000ED 58                              		POP		EAX
-   175 000000EE 61                              		POPAD	
-   176 000000EF 1F                              		POP		DS
-   177 000000F0 07                              		POP		ES
-   178 000000F1 CF                              		IRETD
+    16 00000000                                 		GLOBAL	_load_tr, _farjmp
+    17 00000000                                 		EXTERN	_inthandler21, _inthandler2c, _inthandler27,_inthandler20
+    18 00000000                                 
+    19                                          [SECTION .text]
+    20 00000000                                 _load_tr:	; void load_tr(int tr)
+    21 00000000 0F 00 5C 24 04                  		LTR		[ESP+4]		;tr
+    22 00000005 C3                              		RET
+    23 00000006                                 
+    24 00000006                                 _farjmp:		;void farjmp(int eip, int cs)
+    25 00000006 FF 6C 24 04                     		JMP		FAR	[ESP+4] ;eip, cs
+    26 0000000A C3                              		RET
+    27 0000000B                                 
+    28 0000000B                                 _io_hlt:	; void io_hlt(void);
+    29 0000000B F4                              		HLT
+    30 0000000C C3                              		RET
+    31 0000000D                                 
+    32 0000000D                                 _io_cli:
+    33 0000000D FA                              		CLI
+    34 0000000E C3                              		RET
+    35 0000000F                                 
+    36 0000000F                                 _io_sti:
+    37 0000000F FB                              		STI
+    38 00000010 C3                              		RET
+    39 00000011                                 
+    40 00000011                                 _io_stihlt:
+    41 00000011 FB                              		STI
+    42 00000012 F4                              		HLT
+    43 00000013 C3                              		RET
+    44 00000014                                 
+    45 00000014                                 _io_in8:	; int io_in8(int port);
+    46 00000014 8B 54 24 04                     		MOV		EDX,[ESP+4]		; port
+    47 00000018 B8 00000000                     		MOV		EAX,0
+    48 0000001D EC                              		IN		AL,DX
+    49 0000001E C3                              		RET
+    50 0000001F                                 
+    51 0000001F                                 _io_out8:
+    52 0000001F 8B 54 24 04                     		MOV		EDX, [ESP+4]
+    53 00000023 8A 44 24 08                     		MOV		AL, [ESP+8] ;8bit用だからALを使用している
+    54 00000027 EE                              		OUT		DX, AL
+    55 00000028 C3                              		RET
+    56 00000029                                 		
+    57 00000029                                 _io_load_eflags:
+    58 00000029 9C                              		PUSHFD
+    59 0000002A 58                              		POP		EAX
+    60 0000002B C3                              		RET
+    61 0000002C                                 		
+    62 0000002C                                 _io_store_eflags:
+    63 0000002C 8B 44 24 04                     		MOV		EAX, [ESP+4]
+    64 00000030 50                              		PUSH	EAX
+    65 00000031 9D                              		POPFD
+    66 00000032 C3                              		RET
+    67 00000033                                 
+    68 00000033                                 _load_cr0: ; int load_cr0(void)
+    69 00000033 0F 20 C0                        		MOV		EAX, CR0
+    70 00000036 C3                              		RET
+    71 00000037                                 
+    72 00000037                                 _store_cr0: ;void store_cr0(int cr0)
+    73 00000037 8B 44 24 04                     		MOV		EAX, [ESP+4]
+    74 0000003B 0F 22 C0                        		MOV		CR0, EAX
+    75 0000003E C3                              		RET
+    76 0000003F                                 
+    77 0000003F                                 _load_gdtr:
+    78 0000003F 66 8B 44 24 04                  		MOV		AX, [ESP+4] ; limitは16bitで表現できる
+    79 00000044 66 89 44 24 06                  		MOV		[ESP+6], AX ; addressは32bitでESP+8から格納されている。CPUがリトルエンディアンなのでこれで良い。
+    80 00000049 0F 01 54 24 06                  		LGDT	[ESP+6]
+    81 0000004E C3                              		RET
+    82 0000004F                                 
+    83 0000004F                                 _load_idtr: ;GDTと同じ
+    84 0000004F 66 8B 44 24 04                  		MOV		AX, [ESP+4]
+    85 00000054 66 89 44 24 06                  		MOV		[ESP+6], AX
+    86 00000059 0F 01 5C 24 06                  		LIDT	[ESP+6]
+    87 0000005E C3                              		RET
+    88 0000005F                                 
+    89 0000005F                                 _memtest_sub: ; unsigned int memtest_sub(unsigned int start, unsigned int end)
+    90 0000005F 57                              		PUSH	EDI
+    91 00000060 56                              		PUSH	ESI
+    92 00000061 53                              		PUSH	EBX
+    93 00000062 BE AA55AA55                     		MOV		ESI, 0xaa55aa55 ;pat0 = 0xaa55aa55
+    94 00000067 BF 55AA55AA                     		MOV		EDI, 0x55aa55aa ;pat1 = 0x55aa55aa
+    95 0000006C 8B 44 24 10                     		MOV		EAX, [ESP+12+4] ;i = start PUSHを3回実施しているので、スタックポインタは4 * 3の12バイト進んでいる
+    96 00000070                                 
+    97 00000070                                 mts_loop:
+    98 00000070 89 C3                           		MOV		EBX, EAX
+    99 00000072 81 C3 00000FFC                  		ADD		EBX, 0xffc  ; p = i + 0xffc
+   100 00000078 8B 13                           		MOV		EDX, [EBX]  ; old = *p
+   101 0000007A 89 33                           		MOV		[EBX], ESI  ; *p = pat0
+   102 0000007C 83 33 FF                        		XOR		DWORD [EBX], 0xffffffff ;*p ^= 0xffffffff
+   103 0000007F 3B 3B                           		CMP		EDI, [EBX]	;if(*p != pat1) goto fin
+   104 00000081 75 18                           		JNE		mts_fin
+   105 00000083 83 33 FF                        		XOR		DWORD [EBX], 0xffffffff ;*p ^= 0xffffffff
+   106 00000086 3B 33                           		CMP		ESI, [EBX]  ;if(*p != pat0) goto fin
+   107 00000088 75 11                           		JNE		mts_fin
+   108 0000008A 89 13                           		MOV		[EBX], EDX	; *p = old
+   109 0000008C 05 00001000                     		ADD		EAX, 0x1000	;i += 0x1000
+   110 00000091 3B 44 24 14                     		CMP		EAX, [ESP+12+8] ; if(i <= end) goto mts_loop
+   111 00000095 75 D9                           		JNE		mts_loop
+   112 00000097 5B                              		POP		EBX
+   113 00000098 5E                              		POP		ESI
+   114 00000099 5F                              		POP		EDI
+   115 0000009A C3                              		RET
+   116 0000009B                                 		
+   117 0000009B                                 mts_fin:
+   118 0000009B 89 13                           		MOV		[EBX], EDX ; *p = old
+   119 0000009D 5B                              		POP		EBX
+   120 0000009E 5E                              		POP		ESI
+   121 0000009F 5F                              		POP		EDI
+   122 000000A0 C3                              		RET
+   123 000000A1                                 		
+   124 000000A1                                 _asm_inthandler21:
+   125 000000A1 06                              		PUSH	ES
+   126 000000A2 1E                              		PUSH	DS
+   127 000000A3 60                              		PUSHAD
+   128 000000A4 89 E0                           		MOV		EAX, ESP
+   129 000000A6 50                              		PUSH	EAX
+   130 000000A7 66 8C D0                        		MOV		AX, SS ; C言語の関数をコールする時は、SSレジスタに格納されている値にDSとESを合わせておく必要がある。
+   131 000000AA 8E D8                           		MOV		DS, AX
+   132 000000AC 8E C0                           		MOV		ES, AX
+   133 000000AE E8 [00000000]                   		CALL	_inthandler21
+   134 000000B3 58                              		POP		EAX
+   135 000000B4 61                              		POPAD	
+   136 000000B5 1F                              		POP		DS
+   137 000000B6 07                              		POP		ES
+   138 000000B7 CF                              		IRETD
+   139 000000B8                                 		
+   140 000000B8                                 _asm_inthandler2c:
+   141 000000B8 06                              		PUSH	ES
+   142 000000B9 1E                              		PUSH	DS
+   143 000000BA 60                              		PUSHAD
+   144 000000BB 89 E0                           		MOV		EAX, ESP
+   145 000000BD 50                              		PUSH	EAX
+   146 000000BE 66 8C D0                        		MOV		AX, SS ; C言語の関数をコールする時は、SSレジスタに格納されている値にDSとESを合わせておく必要がある。
+   147 000000C1 8E D8                           		MOV		DS, AX
+   148 000000C3 8E C0                           		MOV		ES, AX
+   149 000000C5 E8 [00000000]                   		CALL	_inthandler2c
+   150 000000CA 58                              		POP		EAX
+   151 000000CB 61                              		POPAD	
+   152 000000CC 1F                              		POP		DS
+   153 000000CD 07                              		POP		ES
+   154 000000CE CF                              		IRETD
+   155 000000CF                                 		
+   156 000000CF                                 _asm_inthandler27:
+   157 000000CF 06                              		PUSH	ES
+   158 000000D0 1E                              		PUSH	DS
+   159 000000D1 60                              		PUSHAD
+   160 000000D2 89 E0                           		MOV		EAX, ESP
+   161 000000D4 50                              		PUSH	EAX
+   162 000000D5 66 8C D0                        		MOV		AX, SS ; C言語の関数をコールする時は、SSレジスタに格納されている値にDSとESを合わせておく必要がある。
+   163 000000D8 8E D8                           		MOV		DS, AX
+   164 000000DA 8E C0                           		MOV		ES, AX
+   165 000000DC E8 [00000000]                   		CALL	_inthandler27
+   166 000000E1 58                              		POP		EAX
+   167 000000E2 61                              		POPAD	
+   168 000000E3 1F                              		POP		DS
+   169 000000E4 07                              		POP		ES
+   170 000000E5 CF                              		IRETD
+   171 000000E6                                 		
+   172 000000E6                                 _asm_inthandler20:
+   173 000000E6 06                              		PUSH	ES
+   174 000000E7 1E                              		PUSH	DS
+   175 000000E8 60                              		PUSHAD
+   176 000000E9 89 E0                           		MOV		EAX, ESP
+   177 000000EB 50                              		PUSH	EAX
+   178 000000EC 66 8C D0                        		MOV		AX, SS ; C言語の関数をコールする時は、SSレジスタに格納されている値にDSとESを合わせておく必要がある。
+   179 000000EF 8E D8                           		MOV		DS, AX
+   180 000000F1 8E C0                           		MOV		ES, AX
+   181 000000F3 E8 [00000000]                   		CALL	_inthandler20
+   182 000000F8 58                              		POP		EAX
+   183 000000F9 61                              		POPAD	
+   184 000000FA 1F                              		POP		DS
+   185 000000FB 07                              		POP		ES
+   186 000000FC CF                              		IRETD

@@ -33,6 +33,8 @@ void inthandler20(int *esp)
 {
 	int i;
 	struct TIMER *timer;
+	char ts = 0;
+	
 	io_out8(PIC0_OCW2, 0x60);
 	timerctl.count++;
 	
@@ -47,8 +49,16 @@ void inthandler20(int *esp)
 		{
 			break;
 		}
+		/* タイムアウト */
 		timer->flags = TIMER_FLAGS_ALLOC;
-		fifo32_put(timer->fifo, timer->data);
+		if(timer != task_timer)
+		{
+			fifo32_put(timer->fifo, timer->data);
+		}
+		else
+		{
+			ts = 1; /* mt_timerがタイムアウトした */
+		}
 		timer = timer->next; /* 次のタイマの番地をtimerを代入 */
 	}
 	timerctl.t0 = timer;
@@ -58,6 +68,11 @@ void inthandler20(int *esp)
 	if(timerctl.count == 0xffffffff)
 	{
 		timer_reset();
+	}
+	
+	if(ts != 0)
+	{
+		task_switch();
 	}
 	return;
 }

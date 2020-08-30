@@ -5,7 +5,7 @@ unsigned int fifo32_status(struct FIFO32* fifo)
 	return fifo->size - fifo->free;
 }
 
-void fifo32_init(struct FIFO32 *fifo, int size, int *buf)
+void fifo32_init(struct FIFO32 *fifo, int size, int *buf, struct TASK *task)
 {
 	fifo->size = size;
 	fifo->buf  = buf;
@@ -13,6 +13,8 @@ void fifo32_init(struct FIFO32 *fifo, int size, int *buf)
 	fifo->flags = 0;
 	fifo->q = 0;
 	fifo->p = 0;
+	fifo->task = task;
+	return;
 }
 
 int fifo32_put(struct FIFO32 *fifo, int data)
@@ -29,6 +31,14 @@ int fifo32_put(struct FIFO32 *fifo, int data)
 		fifo->p = 0;
 	}
 	fifo->free--;
+	/* fifoにデータを書き込んだ時に、タスクを起動する */
+	if(fifo->task != 0)
+	{
+		if(fifo->task->flags != 2)
+		{
+			task_run(fifo->task);
+		}
+	}
 	
 	return 0;
 }

@@ -39,6 +39,10 @@ struct GATE_DESCRIPTOR
 	short offset_high;
 };
 
+#define AR_TSS32 0x0089
+#define ADR_GDT  0x00270000
+
+
 /* アセンブラコード */
 void io_hlt(void);
 void io_cli(void);
@@ -106,11 +110,12 @@ struct FIFO32
 {
 	int *buf;
 	int p, q, size, free, flags;
+	struct TASK *task;
 };
 unsigned int fifo32_status(struct FIFO32* fifo);
 int fifo32_get(struct FIFO32 *fifo);
 int fifo32_put(struct FIFO32 *fifo, int data);
-void fifo32_init(struct FIFO32 *fifo, int size, int *buf);
+void fifo32_init(struct FIFO32 *fifo, int size, int *buf, struct TASK *task);
 
 /* mouse.cの定義 */
 /*
@@ -208,3 +213,35 @@ void timer_settime(struct TIMER *timer, unsigned int timeout);
 struct TIMER *timer_alloc(void);
 void timer_free(struct TIMER *timer);
 void timer_init(struct TIMER *timer, struct FIFO32 *fifo, unsigned char data);
+
+
+/* mtask.c */
+#define MAX_TASKS	1000
+#define TASK_GDT0	3 /* TSSをGDTの何番目に割り当てるか */
+extern struct TIMER* task_timer;
+struct TSS32
+{
+	int backlink, esp0, ss0, esp1, ss1, esp2, ss2, cr3;
+	int eip, eflags, eax, ecx, edx, ebx, esp, ebp, esi, edi;
+	int es, cs, ss, ds, fs, gs;
+	int ldtr, iomap;
+};
+
+struct TASK
+{
+	int sel, flags; /* selはGDTの番号の事 */
+	struct TSS32 tss;
+};
+
+struct TASKCTL
+{
+	int running; /* 動作しているタスク数 */
+	int now; /* 現在動作しているタスク */
+	struct TASK *task[MAX_TASKS];
+	struct TASK task0[MAX_TASKS];
+};
+
+struct TASK *task_init(struct MEMMAN *memman);
+struct TASK *task_alloc(void);
+void task_run(struct TASK *task);
+void task_switch(void);

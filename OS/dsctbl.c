@@ -2,7 +2,7 @@
 
 void init_gdtidt(void)
 {
-	struct SEGMENT_DESCRIPTOR *gdt = (struct SEGMENT_DESCRIPTOR*)0x00270000;
+	struct SEGMENT_DESCRIPTOR *gdt = (struct SEGMENT_DESCRIPTOR*)ADR_GDT;
 	struct GATE_DESCRIPTOR *idt = (struct GATE_DESCRIPTOR*)0x0026f800;
 	int i;
 	
