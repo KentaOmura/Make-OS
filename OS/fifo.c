@@ -36,7 +36,8 @@ int fifo32_put(struct FIFO32 *fifo, int data)
 	{
 		if(fifo->task->flags != 2)
 		{
-			task_run(fifo->task);
+			/* priority‚Í•ÏX‚¹‚¸‚É‹N‚±‚· */
+			task_run(fifo->task,-1,0);
 		}
 	}
 	

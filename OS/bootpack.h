@@ -17,8 +17,16 @@
 #define COL8_008484 14 /* 暗い水色 */
 #define COL8_848484 15 /* 暗い灰色 */
 
-struct SCREEN_INFO
+#define ADR_DISKIMG 0x00100000
+/* メモリ管理用のメモリ */
+#define MEMMAN_ADDR 0x003c0000
+
+struct BOOT_INFO
 {
+	char cyls; /* ブートセクタはどこまでディスクを読んだのか */
+	char leds; /* ブート時のキーボードのLEDの状態 */
+	char vmode; /* ビデオモード  何ビットカラーか */
+	char reserve;
 	short screen_x, screen_y; /* 画面サイズ */
 	char* vram; /* VRAMのアドレス */
 };
@@ -214,10 +222,12 @@ struct TIMER *timer_alloc(void);
 void timer_free(struct TIMER *timer);
 void timer_init(struct TIMER *timer, struct FIFO32 *fifo, unsigned char data);
 
-
 /* mtask.c */
-#define MAX_TASKS	1000
-#define TASK_GDT0	3 /* TSSをGDTの何番目に割り当てるか */
+#define MAX_TASKS      1000
+#define TASK_GDT0	   3 /* TSSをGDTの何番目に割り当てるか */
+#define MAX_TASKS_LV   100
+#define MAX_TASKLEVELS 10
+
 extern struct TIMER* task_timer;
 struct TSS32
 {
@@ -230,18 +240,48 @@ struct TSS32
 struct TASK
 {
 	int sel, flags; /* selはGDTの番号の事 */
+	int priority, level;
+	struct FIFO32 fifo;
 	struct TSS32 tss;
+};
+
+struct TASKLEVEL
+{
+	int running;
+	int now;
+	struct TASK *tasks[MAX_TASKS_LV];
 };
 
 struct TASKCTL
 {
-	int running; /* 動作しているタスク数 */
-	int now; /* 現在動作しているタスク */
-	struct TASK *task[MAX_TASKS];
-	struct TASK task0[MAX_TASKS];
+	int now_lv; /* 現在動作中のレベル */
+	char lv_change; /* タスクスイッチ時にレベルを変更するかどうか */
+	struct TASKLEVEL level[MAX_TASKLEVELS];
+	struct TASK tasks0[MAX_TASKS];
 };
 
 struct TASK *task_init(struct MEMMAN *memman);
 struct TASK *task_alloc(void);
-void task_run(struct TASK *task);
+void task_run(struct TASK *task,int level, int priority);
 void task_switch(void);
+struct TASK *task_now(void);
+void task_add(struct TASK *task);
+void task_remove(struct TASK *task);
+void task_switchsub(void);
+
+
+struct FILEINFO
+{
+	unsigned char name[8], ext[3], type; /* ファイルの名前、拡張子、属性（読み取り専用、隠しファイルなど） */
+	char reserve[10]; /* マイクロソフトが決めた規格。予約として10バイト存在する */
+	unsigned short time, date, clustno; /* 時刻、日付、クラスタ番号（セクタと同じ意味）※クラスタはマイクロソフトの言葉 */
+	unsigned int size; /* ファイルサイズ */
+};
+
+/* consol.c */
+void consol_task(struct SHEET *sheet, unsigned int memtotal);
+
+
+/* file.c */
+void file_loadfile(int clustno, int size, char *buf, int *fat, char *img);
+void file_readfat(int *fat, unsigned char *img);

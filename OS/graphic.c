@@ -117,7 +117,6 @@ void init_palette(void)
 		0x00, 0xff, 0xff,		/* 緑+青 = 水色 */
 		0xff, 0xff, 0xff,		/* 白 */
 		0xf2, 0xf2, 0xf2,		/* 灰色 */
-		//0xc6, 0xc6, 0xc6,		/* 灰色 */
 		0x84, 0x00, 0x00,		/* 暗い赤 */
 		0x00, 0x84, 0x00,		/* 暗い緑 */
 		0x00, 0x00, 0x84,		/* 暗い青 */
@@ -135,17 +134,21 @@ void init_palette(void)
 void set_palette(int start, int end, unsigned char *rgb)
 {
 	int i, eflags;
+	int result = 0;
 	
 	eflags = io_load_eflags(); /* eflagsの内容を記憶する */
 	io_cli();				   /* CLIで割禁 */
 	
 	/* パレットを設定する */
+//	volatile unsigned char *port = 0x03c8;
+	
+	/* I/Oポート空間とメモリ空間は別の空間になるため（メモリマップドI/Oではない）、I/Oポートにアクセスする為には、IN、OUT命令が必要になる */
 	io_out8(0x03c8, start);
 	for(i = start; i <= end; i++)
 	{
-		io_out8(0x03c9, rgb[0]);
-		io_out8(0x03c9, rgb[1]);
-		io_out8(0x03c9, rgb[2]);
+		io_out8(0x03c9, rgb[0] / 4); /* 輝度は通常0～255で指定するが、ビデオカードの標準状態では0～63の値の範囲で指定する必要がある。その為、割り算を実施している */
+		io_out8(0x03c9, rgb[1] / 4);
+		io_out8(0x03c9, rgb[2] / 4);
 		rgb += 3;
 	}
 	/* eflagsを元に戻す */

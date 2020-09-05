@@ -378,21 +378,27 @@
    378 00000252 5D                              	POP	EBP
    379 00000253 E9 [00000000]                   	JMP	_io_store_eflags
    380 00000258                                 L81:
-   381 00000258 0F B6 06                        	MOVZX	EAX,BYTE [ESI]
-   382 0000025B 50                              	PUSH	EAX
-   383 0000025C 43                              	INC	EBX
-   384 0000025D 68 000003C9                     	PUSH	969
-   385 00000262 E8 [00000000]                   	CALL	_io_out8
-   386 00000267 0F B6 46 01                     	MOVZX	EAX,BYTE [1+ESI]
-   387 0000026B 50                              	PUSH	EAX
-   388 0000026C 68 000003C9                     	PUSH	969
-   389 00000271 E8 [00000000]                   	CALL	_io_out8
-   390 00000276 0F B6 46 02                     	MOVZX	EAX,BYTE [2+ESI]
-   391 0000027A 50                              	PUSH	EAX
-   392 0000027B 83 C6 03                        	ADD	ESI,3
-   393 0000027E 68 000003C9                     	PUSH	969
-   394 00000283 E8 [00000000]                   	CALL	_io_out8
-   395 00000288 83 C4 18                        	ADD	ESP,24
-   396 0000028B 39 FB                           	CMP	EBX,EDI
-   397 0000028D 7E C9                           	JLE	L81
-   398 0000028F EB B5                           	JMP	L83
+   381 00000258 8A 06                           	MOV	AL,BYTE [ESI]
+   382 0000025A 43                              	INC	EBX
+   383 0000025B C0 E8 02                        	SHR	AL,2
+   384 0000025E 0F B6 C0                        	MOVZX	EAX,AL
+   385 00000261 50                              	PUSH	EAX
+   386 00000262 68 000003C9                     	PUSH	969
+   387 00000267 E8 [00000000]                   	CALL	_io_out8
+   388 0000026C 8A 46 01                        	MOV	AL,BYTE [1+ESI]
+   389 0000026F C0 E8 02                        	SHR	AL,2
+   390 00000272 0F B6 C0                        	MOVZX	EAX,AL
+   391 00000275 50                              	PUSH	EAX
+   392 00000276 68 000003C9                     	PUSH	969
+   393 0000027B E8 [00000000]                   	CALL	_io_out8
+   394 00000280 8A 46 02                        	MOV	AL,BYTE [2+ESI]
+   395 00000283 C0 E8 02                        	SHR	AL,2
+   396 00000286 83 C6 03                        	ADD	ESI,3
+   397 00000289 0F B6 C0                        	MOVZX	EAX,AL
+   398 0000028C 50                              	PUSH	EAX
+   399 0000028D 68 000003C9                     	PUSH	969
+   400 00000292 E8 [00000000]                   	CALL	_io_out8
+   401 00000297 83 C4 18                        	ADD	ESP,24
+   402 0000029A 39 FB                           	CMP	EBX,EDI
+   403 0000029C 7E BA                           	JLE	L81
+   404 0000029E EB A6                           	JMP	L83
