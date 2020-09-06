@@ -1,5 +1,72 @@
 #include"bootpack.h"
 
+
+struct FILEINFO *file_search(char *name, struct FILEINFO *finfo, int max)
+{
+	int x, y;
+	char s[12];
+	int search;
+	
+	for(y = 0; y < 11; y++)
+	{
+		s[y] = ' ';
+	}
+	y = 0;
+	
+	/* 指定ファイルの名前を大文字に変換する */
+	for(x = 0; name[x] != 0; x++)
+	{
+		if(y >= 11)
+		{
+			return 0;
+		}
+		/* 拡張子 */
+		if(name[x] == '.' && y <= 8)
+		{
+			y = 8;
+		}
+		else
+		{
+			s[y] = name[x];
+			/* 小文字は大文字に変換する */
+			if('a' <= s[y] && s[y] <= 'z')
+			{
+				s[y] -= 0x20;
+			}
+			y++;
+		}
+	}
+	
+	/* 指定ファイルを探す */
+	for(x= 0; x < max; x++)
+	{
+		if(finfo[x].name[0] == 0x00)
+		{
+			break;
+		}
+		/* ディレクトリまたは、ファイルでない物は対象外 */
+		if((finfo[x].type & 0x18) == 0)
+		{
+			search = 1;
+			for(y = 0; y < 11; y++)
+			{
+				if(finfo[x].name[y] != s[y])
+				{
+					search = -1;
+					break;
+				}
+			}
+			if(search == 1)
+			{
+				return finfo + x;
+			}
+		}
+	}
+	
+	/* 見つからなかった */
+	return 0;
+}
+
 /* Fat形式の圧縮を解く */
 void file_readfat(int *fat, unsigned char *img)
 {

@@ -65,6 +65,7 @@ void asm_inthandler20(void);
 void asm_inthandler21(void);
 void asm_inthandler27(void);
 void asm_inthandler2c(void);
+void asm_cons_putchar(void);
 
 /* graphic.c‚Ì’è‹`ŠÖ” */
 void init_palette(void);
@@ -285,3 +286,4 @@ void consol_task(struct SHEET *sheet, unsigned int memtotal);
 /* file.c */
 void file_loadfile(int clustno, int size, char *buf, int *fat, char *img);
 void file_readfat(int *fat, unsigned char *img);
+struct FILEINFO *file_search(char *name, struct FILEINFO *finfo, int max);

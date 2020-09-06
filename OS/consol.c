@@ -1,23 +1,7 @@
 #include"bootpack.h"
 
 #define NULL 0
-
-typedef enum CONSOL_COMMAND
-{
-	 CONSOL_COMMAND_NON	= 0	/* コマンド無し */
-	,CONSOL_COMMAND_MEM		/* メモリ表示 */
-	,CONSOL_COMMAND_DIR		/* ディレクトリ内のファイル表示 */
-	,CONSOL_COMMAND_CLS		/* コンソール画面のクリア */
-	,CONSOL_COMMAND_TYPE	/* 指定したファイルの中身を表示する */
-	,CONSOL_COMMAND_HELP	/* コマンドの種別と意味を表示する */
-	,CONSOL_COMMAND_BAD		/* コマンド不正 */
-}eCONSOL_COMMAND;
-
-struct CONSOL_COMMAND_EXE
-{
-	eCONSOL_COMMAND kind; /* 種別 */
-	int (*execute)(int **argv); /* 実行関数 */
-};
+#define AR_CODE32_ER	0x409a
 
 struct CONSOL_COMMAND_MEANING
 {
@@ -25,25 +9,23 @@ struct CONSOL_COMMAND_MEANING
 	const char *mean;
 };
 
-int memExecute(int **argv);
-int dirExecute(int **argv);
-int clsExecute(int **argv);
-int typeExecute(int **argv);
-int helpExecute(int **argv);
-int badExecute(int **argv);
-int execute(eCONSOL_COMMAND kind, int **argv, int cursol_y);
-int cons_newline(int cursol_y, struct SHEET *sheet);
-
-/* コンソールタスクの実行処理テーブル */
-struct CONSOL_COMMAND_EXE commandExeTable[] =
+struct CONSOL_INFO
 {
-	 {CONSOL_COMMAND_MEM, &memExecute}
-	,{CONSOL_COMMAND_DIR, &dirExecute}
-	,{CONSOL_COMMAND_CLS, &clsExecute}
-	,{CONSOL_COMMAND_TYPE,&typeExecute}
-	,{CONSOL_COMMAND_HELP,&helpExecute}
-	,{CONSOL_COMMAND_BAD, &badExecute}
+	struct SHEET *sht;
+	int cur_x, cur_y, cur_c;
 };
+
+int memExecute(struct CONSOL_INFO *cons);
+int clsExecute(struct CONSOL_INFO *cons);
+int dirExecute(struct CONSOL_INFO *cons);
+int typeExecute(struct CONSOL_INFO *cons, int *fat, char *cmdline);
+int helpExecute(struct CONSOL_INFO *cons);
+int hltExecute(struct CONSOL_INFO *cons, int *fat);
+int badExecute(struct CONSOL_INFO *cons);
+void commandRun(struct CONSOL_INFO *cons, int *fat, char *cmdline);
+void cons_newline(struct CONSOL_INFO *cons);
+void cons_putchar(struct CONSOL_INFO *cons, char chr, char move);
+int cmd_app(struct CONSOL_INFO *cons, int *fat, char *cmdline);
 
 /* コマンドの意味 */
 struct CONSOL_COMMAND_MEANING commandMeaningTable[] =
@@ -54,41 +36,21 @@ struct CONSOL_COMMAND_MEANING commandMeaningTable[] =
 	,{"type", "Contents of Specified file"}
 };
 
-/* コマンド実行 */
-int execute(eCONSOL_COMMAND kind, int **argv, int cursol_y)
-{
-	int i = 0;
-	int result = cursol_y;
-	
-	if(CONSOL_COMMAND_NON == kind)
-	{
-		return result;
-	}
-	
-	for(; i < sizeof(commandExeTable)/sizeof(struct CONSOL_COMMAND_EXE); i++)
-	{
-		if(commandExeTable[i].kind == kind)
-		{
-			result = commandExeTable[i].execute(argv);
-		}
-	}
-	
-	return result;
-}
-
-int cons_newline(int cursol_y, struct SHEET *sheet)
+void cons_newline(struct CONSOL_INFO *cons)
 {
 	int x, y;
-	if(cursol_y < sheet->bysize - 32)
+	struct SHEET *sheet = cons->sht;
+	
+	if(cons->cur_y < 28 + 112) /* コンソールの文字描画画面のy軸における限界数の1つ手前 */
 	{
-		cursol_y += 16;
+		cons->cur_y += 16;
 	}
 	else
 	{
 		/* 最初の行から最後の行1つ手前までのデータをずらす*/
-		for(y = 28; y < sheet->bysize - 25; y++)
+		for(y = 28; y < 28 + 112; y++)
 		{
-			for(x = 8; x < sheet->bxsize - 8; x++)
+			for(x = 8; x < 8 + 240; x++)
 			{
 				sheet->buf[x + y * sheet->bxsize] = sheet->buf[x + (y + 16) * sheet->bxsize];
 			}
@@ -101,31 +63,35 @@ int cons_newline(int cursol_y, struct SHEET *sheet)
 				sheet->buf[x + y * sheet->bxsize] = COL8_000000;
 			}
 		}
-		sheet_refresh(sheet, 8, 28,sheet->bxsize - 8, sheet->bysize - 9);
+		sheet_refresh(sheet, 8, 28, sheet->bxsize - 8, sheet->bysize - 9);
 	}
 	
-	return cursol_y;
+	cons->cur_x = 8;
 }
 
 void consol_task(struct SHEET *sheet, unsigned int memtotal)
 {
-	struct MEMMAN *memman = (struct MEMMAN *)MEMMAN_ADDR;
-	struct FILEINFO *fileInfo = (struct FILEINFO *)(ADR_DISKIMG + 0x002600);
 	struct TIMER *timer;
 	struct TASK *task = task_now(); /* スリープ処理に必要な為、自分自身のタスクを知る必要がある */
-	unsigned char s[30], cmdline[30];
-	int i, fifo_buf[128], cursol_x = 16, cursol_y = 28, cursol_c = -1;
-	int x, y;
-	int *consolArg[10];
-	eCONSOL_COMMAND type;
+	struct MEMMAN *memman = (struct MEMMAN *)MEMMAN_ADDR;
+	struct CONSOL_INFO cons;
+	unsigned char cmdline[30];
+	int i, fifo_buf[128];
+	int *fat = (int *)memman_alloc_4k(memman, 4 * 2880);
+	
+	cons.sht = sheet;
+	cons.cur_x = 8;
+	cons.cur_y = 28;
+	cons.cur_c = -1;
+	*((int *)0x0fec) = (int)&cons;
 	
 	fifo32_init(&task->fifo, 128, fifo_buf, task);
-	
 	timer = timer_alloc();
 	timer_init(timer, &task->fifo, 1);
 	timer_settime(timer, 50); /* 0.5秒でタイマーを張る */
-	
-	putfont8_sht(sheet, 8, 28, COL8_FFFFFF, COL8_000000, ">", 1);
+	file_readfat(fat, (unsigned char *)(ADR_DISKIMG + 0x000200));
+
+	cons_putchar(&cons, '>', 1);
 	
 	while(1)
 	{
@@ -144,30 +110,29 @@ void consol_task(struct SHEET *sheet, unsigned int memtotal)
 				if(0 != i)
 				{
 					timer_init(timer, &task->fifo, 0);
-					if(cursol_c >= 0)
+					if(cons.cur_c >= 0)
 					{
-						cursol_c = COL8_FFFFFF; /* 白 */
+						cons.cur_c = COL8_FFFFFF; /* 白 */
 					}
 				}
 				else
 				{
 					timer_init(timer, &task->fifo, 1);
-					if(cursol_c >= 0)
+					if(cons.cur_c >= 0)
 					{
-						cursol_c = COL8_000000; /* 黒 */
+						cons.cur_c = COL8_000000; /* 黒 */
 					}
 				}
 				timer_settime(timer, 50);
 			}
 			else if(2 == i) /* 点滅を許可 */
 			{
-				cursol_c = COL8_FFFFFF; /* 白 */
+				cons.cur_c = COL8_FFFFFF; /* 白 */
 			}
 			else if(3 == i) /* 点滅の禁止 */
 			{
-				cursol_c = -1;
-				boxfill8(sheet->buf, sheet->bxsize, COL8_000000, cursol_x, cursol_y, cursol_x + 7, cursol_y + 15);
-				sheet_refresh(sheet, cursol_x, cursol_y, cursol_x + 8, cursol_y + 16);
+				boxfill8(sheet->buf, sheet->bxsize, COL8_000000, cons.cur_x, cons.cur_y, cons.cur_x + 7, cons.cur_y + 15);
+				cons.cur_c = -1;
 			}
 			else
 			{
@@ -175,127 +140,154 @@ void consol_task(struct SHEET *sheet, unsigned int memtotal)
 				{
 					if(i == 256 + 8)
 					{
-						if(cursol_x > 16)
+						if(cons.cur_x > 16)
 						{
-							putfont8_sht(sheet, cursol_x, cursol_y, COL8_FFFFFF, COL8_000000, " ",1);
-							cursol_x -= 8;
+							cons_putchar(&cons, ' ', 0);
+							cons.cur_x -= 8;
 						}
 					}
 					else if(i == 0x1c + 256)
 					{
-						type = CONSOL_COMMAND_NON;
-						putfont8_sht(sheet, cursol_x, cursol_y, COL8_FFFFFF, COL8_000000, " ",1);
-						cmdline[cursol_x / 8 - 2] = 0;
-						cursol_y = cons_newline(cursol_y, sheet);
-						/* コマンドを実行する */
-						if(strcmp(cmdline, "mem") == 0)
-						{
-							consolArg[0] = (int *)sheet;
-							consolArg[1] = (int *)memman;
-							consolArg[2] = &cursol_y;
-							type = CONSOL_COMMAND_MEM;
-						}
-						else if(strcmp(cmdline, "cls") == 0)
-						{
-							consolArg[0] = (int *)sheet;	
-							type = CONSOL_COMMAND_CLS;
-						}
-						else if(strcmp(cmdline, "dir") == 0)
-						{
-							consolArg[0] = (int *)sheet;
-							consolArg[1] = (int *)fileInfo;
-							consolArg[2] = &cursol_y;
-							type = CONSOL_COMMAND_DIR;
-						}
-						else if(strncmp(cmdline, "type ", 5) == 0)
-						{
-							consolArg[0] = (int *)sheet;
-							consolArg[1] = (int *)fileInfo;
-							consolArg[2] = (int *)cmdline;
-							consolArg[3] = &cursol_y;
-							consolArg[4] = (int *)memman;
-							type = CONSOL_COMMAND_TYPE;
-						}
-						else if(strcmp(cmdline, "help") == 0)
-						{
-							consolArg[0] = (int *)sheet;
-							consolArg[1] = &cursol_y;
-							type = CONSOL_COMMAND_HELP;
-						}
-						else if(cmdline[0] != 0)
-						{
-							consolArg[0] = (int *)sheet;
-							consolArg[1] = &cursol_y;
-							type = CONSOL_COMMAND_BAD;
-						}
-						cursol_y = execute(type, consolArg, cursol_y);
-						putfont8_sht(sheet, 8, cursol_y, COL8_FFFFFF, COL8_000000, ">",1);
-						cursol_x = 16;
+						cons_putchar(&cons, ' ', 0);
+						cmdline[cons.cur_x / 8 - 2] = 0;
+						cons_newline(&cons);
+						commandRun(&cons, fat, cmdline);
+						cons_putchar(&cons, '>', 1);
 					}
 					else
 					{
-						if(cursol_x < sheet->bxsize - 16)
+						if(cons.cur_x < 240)
 						{
-							s[0] = i - 256;
-							s[1] = 0;
-							cmdline[cursol_x / 8 - 2] = i - 256;
-							putfont8_sht(sheet, cursol_x, cursol_y, COL8_FFFFFF, COL8_000000, s,1);
-							cursol_x += 8;
+							cmdline[cons.cur_x / 8 - 2] = i - 256;
+							cons_putchar(&cons, i - 256, 1);
 						}
 					}
 				}
 			}
-			if(cursol_c >= 0)
+			if(cons.cur_c >= 0)
 			{
-				boxfill8(sheet->buf, sheet->bxsize, cursol_c, cursol_x, cursol_y, cursol_x + 7, cursol_y + 15);
+				boxfill8(sheet->buf, sheet->bxsize, cons.cur_c, cons.cur_x, cons.cur_y, cons.cur_x + 7, cons.cur_y + 15);
 			}
-			sheet_refresh(sheet, cursol_x, cursol_y, cursol_x + 8, cursol_y + 16);
+			sheet_refresh(sheet, cons.cur_x, cons.cur_y, cons.cur_x + 8, cons.cur_y + 16);
 		}
 	}
 }
 
-/* argv[0] = sheet, argv[1] = memman, argv[2] = cursol_y*/
-int memExecute(int **argv)
+int cmd_app(struct CONSOL_INFO *cons, int *fat, char *cmdline)
 {
-	char s[30];
-	struct SHEET *sheet = (struct SHEET *)argv[0];
-	struct MEMMAN *memman = (struct MEMMAN *)argv[1];
-	int cursol_y = *argv[2];
-	int result = -1;
+	struct MEMMAN *memman = (struct MEMMAN *)MEMMAN_ADDR;
+	struct FILEINFO *finfo;
+	struct SEGMENT_DESCRIPTOR *gdt = (struct SEGMENT_DESCRIPTOR *)0x00270000;
+	char name[18], *p;
+	int i;
 	
-	if(sheet == NULL || memman == NULL)
+	/* コマンドラインからファイル名を生成 */
+	for(i = 0; i < 13; i++)
 	{
-		return result;
+		if(cmdline[i] <= ' ')
+		{
+			break;
+		}
+		name[i] = cmdline[i];
+	}
+	name[i] = 0; /* ファイル名の後ろを0にする */
+	
+	finfo = file_search(name, (struct FILEINFO *)(ADR_DISKIMG + 0x002600), 224); /* 224はファイルの格納限界数 */
+	
+	/* 拡張子指定が無くても、起動できるように対応 */
+	if(finfo == 0 && name[i - 1] != '.')
+	{
+		/* 拡張子をつけてもう一度探す */
+		name[i  ] = '.';
+		name[i+1] = 'H';
+		name[i+2] = 'R';
+		name[i+3] = 'B';
+		name[i+4] = 0;
+		finfo = file_search(name, (struct FILEINFO *)(ADR_DISKIMG + 0x002600), 224);
 	}
 	
-	/* memコマンド */
-	sprintf(s, "total  %dMB", memman->storage / (1024 * 1024));
-	putfont8_sht(sheet, 8, cursol_y, COL8_FFFFFF, COL8_000000, s,30);
-	cursol_y = cons_newline(cursol_y, sheet);
-	sprintf(s, "free  %dKB", memman_total(memman) / 1024);
-	putfont8_sht(sheet, 8, cursol_y, COL8_FFFFFF, COL8_000000, s,30);
-	cursol_y = cons_newline(cursol_y, sheet);
-	cursol_y = cons_newline(cursol_y, sheet);
-
-	/* 最終的なカーソルの行を設定する */
-	result = cursol_y;
+	if(finfo != 0)
+	{
+		p = (char *)memman_alloc_4k(memman, finfo->size);
+		file_loadfile(finfo->clustno, finfo->size, p, fat,(char *)(ADR_DISKIMG + 0x003e00));
+		set_segmdesc(gdt + 1003, finfo->size - 1, (int)p, AR_CODE32_ER);
+		farcall(0,1003*8);
+		memman_free_4k(memman, (int)p, finfo->size);
+		cons_newline(cons);
+		return 0;
+	}
 	
-	return result;
+	/* ファイルが見つからなかった */
+	return -1;
 }
 
-int dirExecute(int **argv)
+/* コマンドの実行 */
+void commandRun(struct CONSOL_INFO *cons, int *fat, char *cmdline)
+{
+	
+	if(strcmp(cmdline, "mem") == 0)
+	{
+		memExecute(cons);
+	}
+	else if(strcmp(cmdline, "cls") == 0)
+	{
+		clsExecute(cons);
+	}
+	else if(strcmp(cmdline, "dir") == 0)
+	{
+		dirExecute(cons);
+	}
+	else if(strncmp(cmdline, "type ", 5) == 0)
+	{
+		typeExecute(cons, fat, cmdline);
+	}
+	else if(strcmp(cmdline, "help") == 0)
+	{
+		helpExecute(cons);
+	}
+	else if(cmdline[0] != 0)
+	{
+		if(cmd_app(cons, fat, cmdline) != 0)
+		{
+			/* コマンドでなく、アプリでなく、改行でもない */
+			badExecute(cons);
+		}
+	}
+	
+	return;
+}
+
+int memExecute(struct CONSOL_INFO *cons)
 {
 	char s[30];
-	struct SHEET *sheet = (struct SHEET *)argv[0];
-	struct FILEINFO *fileInfo = (struct FILEINFO *)argv[1];
-	int cursol_y = *argv[2];
-	int x, y;
-	int result = -1;
+	struct MEMMAN *memman = (struct MEMMAN *)MEMMAN_ADDR;
 	
-	
-	if(sheet == NULL || fileInfo == NULL)
+	if(NULL == cons)
 	{
-		return result;
+		return -1;
+	}
+	
+	/* 全体のメモリ量と残量を表示する */
+	sprintf(s, "total  %dMB", memman->storage / (1024 * 1024));
+	putfont8_sht(cons->sht, 8, cons->cur_y, COL8_FFFFFF, COL8_000000, s,30);
+	cons_newline(cons);
+	sprintf(s, "free  %dKB", memman_total(memman) / 1024);
+	putfont8_sht(cons->sht, 8, cons->cur_y, COL8_FFFFFF, COL8_000000, s,30);
+	cons_newline(cons);
+	cons_newline(cons);
+	
+	return 0;
+}
+
+int dirExecute(struct CONSOL_INFO *cons)
+{
+	char s[30];
+	struct FILEINFO *fileInfo = (struct FILEINFO *)(ADR_DISKIMG + 0x002600);
+	int x, y;
+	
+	if(NULL == cons)
+	{
+		return -1;
 	}
 	
 	for(x = 0; x < 224; x++)
@@ -316,201 +308,179 @@ int dirExecute(int **argv)
 				s[9]  = fileInfo[x].ext[0];
 				s[10] = fileInfo[x].ext[1];
 				s[11] = fileInfo[x].ext[2];
-				putfont8_sht(sheet, 8, cursol_y, COL8_FFFFFF, COL8_000000, s,30);
-				cursol_y = cons_newline(cursol_y, sheet);
+				putfont8_sht(cons->sht, 8, cons->cur_y, COL8_FFFFFF, COL8_000000, s,30);
+				cons_newline(cons);
 			}
 		}
 	}
-	cursol_y = cons_newline(cursol_y, sheet);
+	cons_newline(cons);
 	
-	result = cursol_y;
-	
-	return result;
+	return 0;
 }
-int clsExecute(int **argv)
+int clsExecute(struct CONSOL_INFO *cons)
 {
-	struct SHEET *sheet = (struct SHEET *)argv[0];
-	int result = -1;
 	int x, y;
+	struct SHEET *sheet;
 	
-	if(sheet == NULL)
+	if(NULL == cons)
 	{
-		return result;
+		return -1;
 	}
 	
-	for(y = 28; y < sheet->bysize - 9; y++)
+	sheet = cons->sht;
+	
+	for(y = 28; y < 128 + 28; y++)
 	{
-		for(x = 8; x < sheet->bxsize - 8; x++)
+		for(x = 8; x < 240 + 8; x++)
 		{
 			sheet->buf[x + y * sheet->bxsize] = COL8_000000;
 		}
 	}
-	sheet_refresh(sheet, 8, 28,sheet->bxsize - 8, sheet->bysize - 9);
+	sheet_refresh(sheet, 8, 28,240 + 8, 128 + 28);
+	cons->cur_y = 28;
 	
-	result = 28;
-	
-	return result;
+	return 0;
 }
-int badExecute(int **argv)
+
+int badExecute(struct CONSOL_INFO *cons)
 {
-	struct SHEET *sheet = (struct SHEET *)argv[0];
-	int cursol_y = *argv[1];
-	int result = -1;
-	
-	if(sheet == NULL)
+	if(NULL == cons)
 	{
-		return result;
+		return -1;
 	}
 	
-	putfont8_sht(sheet, 8, cursol_y, COL8_FFFFFF, COL8_000000, "Bad Command",30);
-	cursol_y = cons_newline(cursol_y, sheet);
-	cursol_y = cons_newline(cursol_y, sheet);
-	result = cursol_y;
+	putfont8_sht(cons->sht, 8, cons->cur_y, COL8_FFFFFF, COL8_000000, "Bad Command",30);
+	cons_newline(cons);
+	cons_newline(cons);
 	
-	return result;
+	return 0;
 }
-int typeExecute(int **argv)
+
+int typeExecute(struct CONSOL_INFO *cons, int *fat, char *cmdline)
 {
 	unsigned char s[15]; /* ファイル名格納用 */
-	struct SHEET *sheet = (struct SHEET *)argv[0];
-	struct FILEINFO *finfo = (struct FILEINFO *)argv[1];
-	unsigned char *cmdline = (unsigned char *)argv[2];
-	int cursol_y = *argv[3];
-	struct MEMMAN *memman = (struct MEMMAN *)argv[4];
-	int cursol_x;
+	struct FILEINFO *fileInfo = file_search(cmdline + 5, (struct FILEINFO *)(ADR_DISKIMG + 0x002600), 224); /* 224はファイルの格納限界数 */
+	struct MEMMAN *memman = (struct MEMMAN *)MEMMAN_ADDR;
 	int x, y;
 	int search = 0;
 	char *p;
-	int *fat = (int *)memman_alloc_4k(memman, 4 * 2880);
 	
-	file_readfat(fat, (unsigned char *)(ADR_DISKIMG + 0x000200));
-
-	for(y = 0; y < 11; y++)
+	if(NULL == cons || fat == NULL || cmdline == NULL)
 	{
-		s[y] = ' ';
+		return -1;
 	}
-	y = 0;
 	
-	/* type 分の文字を考慮して5スタート
-	   ファイル名を設定する
-	*/
-	for(x = 5; y < 11 && cmdline[x] != 0; x++)
-	{
-		/* 拡張子 */
-		if(cmdline[x] == '.' && y <= 8)
-		{
-			y = 8;
-		}
-		else
-		{
-			s[y] = cmdline[x];
-			/* 小文字は大文字に変換する */
-			if('a' <= s[y] && s[y] <= 'z')
-			{
-				s[y] -= 0x20;
-			}
-			y++;
-		}
-	}
-	/* ファイルを探す */
-	for(x= 0; x < 224;x++) /* 224はファイルのデータを格納できる限界の数 */
-	{
-		if(finfo[x].name[0] == 0x00)
-		{
-			break;
-		}
-		/* ディレクトリまたは、ファイルでない物は対象外 */
-		if((finfo[x].type & 0x18) == 0)
-		{
-			search = 1;
-			for(y = 0; y < 11; y++)
-			{
-				if(finfo[x].name[y] != s[y])
-				{
-					search = -1;
-					break;
-				}
-			}
-			if(search == 1)
-			{
-				break;
-			}
-		}
-	}
-	if(x < 224 && finfo[x].name[0] != 0x00)
+	if(fileInfo != NULL)
 	{
 		/* ファイルが見つかった場合 */
-		p = (char *)memman_alloc_4k(memman, finfo[x].size);
-		file_loadfile(finfo[x].clustno, finfo[x].size, p, fat,(char *)(ADR_DISKIMG + 0x003e00));
-		cursol_x = 8;
-		for(y = 0; y < finfo[x].size; y++)
+		p = (char *)memman_alloc_4k(memman, fileInfo->size);
+		file_loadfile(fileInfo->clustno, fileInfo->size, p, fat,(char *)(ADR_DISKIMG + 0x003e00));
+		for(y = 0; y < fileInfo->size; y++)
 		{
-			/* 1文字ずつ出力する */
-			s[0] = p[y];
-			s[1] = 0;
-			if(s[0] == 0x09) /* タブ */
-			{
-				while(1)
-				{
-					putfont8_sht(sheet, cursol_x, cursol_y, COL8_FFFFFF, COL8_000000, " ", 1);
-					cursol_x += 8;
-					if(cursol_x == 8 + 240)
-					{
-						cursol_x = 8;
-						cursol_y = cons_newline(cursol_y, sheet);
-					}
-					if(((cursol_x - 8) & 0x1f) == 0)
-					{
-						break; /* 32で割り切れる */
-					}
-				}
-			}
-			else if(s[0] == 0x0a) /* 改行 */
-			{
-				cursol_x = 8;
-				cursol_y = cons_newline(cursol_y, sheet);
-			}
-			else if(s[0] == 0x0d) /* 復帰 */
-			{
-			}
-			else
-			{
-				putfont8_sht(sheet, cursol_x, cursol_y, COL8_FFFFFF, COL8_000000, s, 1);
-				cursol_x += 8;
-				if(cursol_x == 8 + 240) /* 右端まで到達した */
-				{
-					cursol_x = 8;
-					cursol_y = cons_newline(cursol_y, sheet);
-				}
-			}
+			cons_putchar(cons, p[y], 1);
 		}
-		memman_free_4k(memman, (int)p,finfo[x].size);
+		memman_free_4k(memman, (int)p, fileInfo->size);
 	}
 	else
 	{
 		/* ファイルが見つからなかった場合 */
-		putfont8_sht(sheet, 8, cursol_y, COL8_FFFFFF, COL8_000000, "File not found", 15);
-		cursol_y = cons_newline(cursol_y, sheet);
+		putfont8_sht(cons->sht, 8, cons->cur_y, COL8_FFFFFF, COL8_000000, "File not found", 15);
+		cons_newline(cons);
 	}
 	
-	cursol_y = cons_newline(cursol_y, sheet);
-
-	return cursol_y;
+	cons_newline(cons);
+	return 0;
 }
 
-int helpExecute(int **argv)
+int helpExecute(struct CONSOL_INFO *cons)
 {
-	struct SHEET *sheet = (struct SHEET *)argv[0];
-	int cursol_y = *argv[1];
 	int i;
+	
+	if(NULL == cons)
+	{
+		return -1;
+	}
 	
 	for(i = 0; i < sizeof(commandMeaningTable)/sizeof(struct CONSOL_COMMAND_MEANING); i++)
 	{
-		putfont8_sht(sheet, 8, cursol_y, COL8_FFFFFF, COL8_000000, commandMeaningTable[i].name, 30);
-		cursol_y = cons_newline(cursol_y, sheet);
-		putfont8_sht(sheet, 8, cursol_y, COL8_FFFFFF, COL8_000000, commandMeaningTable[i].mean, 30);
-		cursol_y = cons_newline(cursol_y, sheet);
+		putfont8_sht(cons->sht, 8, cons->cur_y, COL8_FFFFFF, COL8_000000, commandMeaningTable[i].name, 30);
+		cons_newline(cons);
+		putfont8_sht(cons->sht, 8, cons->cur_y, COL8_FFFFFF, COL8_000000, commandMeaningTable[i].mean, 30);
+		cons_newline(cons);
 	}
 	
-	return cursol_y;
+	return 0;
 }
+
+int hltExecute(struct CONSOL_INFO *cons, int *fat)
+{
+	struct MEMMAN *memman = (struct MEMMAN *)MEMMAN_ADDR;
+	struct FILEINFO *fileInfo = file_search("HLT.HRB", (struct FILEINFO *)(ADR_DISKIMG + 0x002600), 224); /* 224はファイルの格納限界数 */
+	struct SEGMENT_DESCRIPTOR *gdt = (struct SEGMENT_DESCRIPTOR *)0x00270000;
+	char *p;
+	
+	if(NULL != fileInfo)
+	{
+		/* ファイルが見つかった場合 */
+		p = (char *)memman_alloc_4k(memman, fileInfo->size);
+		file_loadfile(fileInfo->clustno, fileInfo->size, p, fat,(char *)(ADR_DISKIMG + 0x003e00));
+		set_segmdesc(gdt + 1003, fileInfo->size - 1, (int)p, AR_CODE32_ER);
+		farcall(0,1003*8);
+		memman_free_4k(memman, (int)p, fileInfo->size);
+	}
+	else
+	{
+		/* ファイルが見つからなかった場合 */
+		putfont8_sht(cons->sht, 8, cons->cur_y, COL8_FFFFFF, COL8_000000, "File not found", 15);
+		cons_newline(cons);
+	}
+	
+	cons_newline(cons);
+	return 0;
+}
+
+void cons_putchar(struct CONSOL_INFO *cons, char chr, char move)
+{
+	char s[2];
+	
+	s[0] = chr;
+	s[1] = 0;
+	if(s[0] == 0x09) /* タブ */
+	{
+		while(1)
+		{
+			putfont8_sht(cons->sht, cons->cur_x, cons->cur_y, COL8_FFFFFF, COL8_000000, " ", 1);
+			cons->cur_x += 8;
+			if(cons->cur_x == 8 + 240)
+			{
+				cons_newline(cons);
+			}
+			if(((cons->cur_x - 8) & 0x1f) == 0)
+			{
+				break; /* 32で割り切れる */
+			}
+		}
+	}
+	else if(s[0] == 0x0a) /* 改行 */
+	{
+		cons_newline(cons);
+	}
+	else if(s[0] == 0x0d) /* 復帰 */
+	{
+		/* 何もしない */
+	}
+	else
+	{
+		putfont8_sht(cons->sht, cons->cur_x, cons->cur_y, COL8_FFFFFF, COL8_000000, s, 1);
+		if(move != 0)
+		{
+			cons->cur_x += 8;
+			if(cons->cur_x == 8 + 240) /* 右端まで到達した */
+			{
+				cons_newline(cons);
+			}
+		}
+	}
+}
+
+
