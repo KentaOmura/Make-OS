@@ -1,0 +1,9 @@
+[INSTRSET "i486p"]
+[BITS 32]
+	MOV		EAX,1*8	; OS用のセグメント
+	MOV		DS, AX
+	MOV		BYTE [0x1026000], 0
+	MOV		EDX, 4
+	INT		0x40
+	RETF
+	

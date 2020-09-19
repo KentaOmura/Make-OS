@@ -58,22 +58,62 @@ bootpack.bim : $(OBJS_BOOTPACK) Makefile
 bootpack.hrb : bootpack.bim Makefile
 	$(BIM2HRB) bootpack.bim bootpack.hrb 0
 
-hlt.hrb : hlt.nas Makefile
-	$(NASK) hlt.nas hlt.hrb hlt.lst
-
 haribote.sys : asmhead.bin bootpack.hrb Makefile
 	copy /B asmhead.bin+bootpack.hrb haribote.sys
 
-haribote.img : ipl10.bin haribote.sys hlt.hrb Makefile
+haribote.img : ipl10.bin haribote.sys Makefile \
+			   hello2.hrb hello.hrb a.hrb crack.hrb crack2.hrb bug1.hrb bug2.hrb
 	$(EDIMG)   imgin:../z_tools/fdimg0at.tek \
 		wbinimg src:ipl10.bin len:512 from:0 to:0 \
 		copy from:haribote.sys to:@: \
 		copy from:ipl10.nas to:@: \
 		copy from:make.bat to:@: \
-		copy from:hlt.hrb to:@: \
+		copy from:hello.hrb to:@: \
+		copy from:hello2.hrb to:@: \
+		copy from:a.hrb to:@: \
+		copy from:crack.hrb to:@: \
+		copy from:crack2.hrb to:@: \
+		copy from:bug1.hrb to:@: \
+		copy from:bug2.hrb to:@: \
 		imgout:haribote.img
 
+crack.bim : crack.obj a_nask.obj Makefile
+	$(OBJ2BIM) @$(RULEFILE) out:crack.bim map:crack.map crack.obj a_nask.obj
+
+crack.hrb : crack.bim Makefile
+	$(BIM2HRB) crack.bim crack.hrb 0
+
+crack2.hrb : crack2.nas Makefile
+	$(NASK) crack2.nas crack2.hrb crack2.lst
+
+a.bim : a.obj a_nask.obj Makefile
+	$(OBJ2BIM) @$(RULEFILE) out:a.bim map:a.map a.obj a_nask.obj
+
+a.hrb : a.bim Makefile
+	$(BIM2HRB) a.bim a.hrb 0
+
+bug2.bim : bug2.obj Makefile
+	$(OBJ2BIM) @$(RULEFILE) out:bug2.bim map:bug2.map bug2.obj
+
+bug2.hrb : bug2.bim Makefile
+	$(BIM2HRB) bug2.bim bug2.hrb 0
+
+bug1.bim : bug1.obj a_nask.obj Makefile
+	$(OBJ2BIM) @$(RULEFILE) out:bug1.bim map:bug1.map bug1.obj a_nask.obj
+
+bug1.hrb : bug1.bim Makefile
+	$(BIM2HRB) bug1.bim bug1.hrb 0
+
+hello.hrb : hello.nas Makefile
+	$(NASK) hello.nas hello.hrb hello.lst
+
+hello2.hrb : hello2.nas Makefile
+	$(NASK) hello2.nas hello2.hrb hello2.lst
+
 # ˆê”Ê‹K‘¥
+
+%.hrb : %.nas Makefile
+	$(NASK) $*.nas $*.hrb $*.lst
 
 %.gas : %.c Makefile
 	$(CC1) -o $*.gas $*.c
@@ -103,10 +143,11 @@ clean :
 	-$(DEL) *.lst
 	-$(DEL) *.gas
 	-$(DEL) *.obj
+	-$(DEL) *.bak
 	-$(DEL) bootpack.nas
-	-$(DEL) bootpack.map
-	-$(DEL) bootpack.bim
-	-$(DEL) bootpack.hrb
+	-$(DEL) *.map
+	-$(DEL) *.bim
+	-$(DEL) *.hrb
 	-$(DEL) haribote.sys
 
 src_only :

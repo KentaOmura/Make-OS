@@ -11,7 +11,7 @@ void init_gdtidt(void)
 	{
 		set_segmdesc(gdt + i, 0, 0, 0);
 	}
-	set_segmdesc(gdt + 1, 0xfffffff, 0, 0x4092); /* 書き込み可能。システム専用のセグメント */
+	set_segmdesc(gdt + 1, 0xfffffff, 0, 0x4092); /* 書き込み可能。データ専用のセグメント */
 	set_segmdesc(gdt + 2, 0x0007fff,0x00280000, 0x409a); /* システム専用の実行可能セグメント */
 	
 	/* GDTRに設定する */
@@ -24,11 +24,13 @@ void init_gdtidt(void)
 	}
 
 	/* キーボード割り込み有効化させる */
+	set_gatedesc(idt + 0x0d, (int)asm_inthandler0d, 2 * 8, AR_INTGATE32);
+	set_gatedesc(idt + 0x0c, (int)asm_inthandler0c, 2 * 8, AR_INTGATE32);
 	set_gatedesc(idt + 0x20, (int)asm_inthandler20, 2 * 8, AR_INTGATE32);
 	set_gatedesc(idt + 0x21, (int)asm_inthandler21, 2 * 8, AR_INTGATE32);
 	set_gatedesc(idt + 0x2c, (int)asm_inthandler2c, 2 * 8, AR_INTGATE32);
 	set_gatedesc(idt + 0x27, (int)asm_inthandler27, 2 * 8, AR_INTGATE32);
-	set_gatedesc(idt + 0x40, (int)asm_cons_putchar, 2 * 8, AR_INTGATE32);
+	set_gatedesc(idt + 0x40, (int)asm_hrb_api,      2 * 8, AR_INTGATE32 + 0x60);
 
 	/* IDTRに設定する */
 	load_idtr(0x7ff, 0x0026f800);

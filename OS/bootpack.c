@@ -26,6 +26,17 @@ void make_wtitle8(unsigned char *buf, int xsize, char *title, char act);
 void putfont8_sht(struct SHEET *sht, int x, int y, int c, int b, char *s, int l);
 void makeTextbox8(struct SHEET *sht, int x0, int y0, int sx, int sy, int c);
 
+
+struct MOUSE_COODINATE getMouseCoodinate()
+{
+	struct MOUSE_COODINATE temp;
+	
+	temp.mx = 20;
+	temp.my = 20;
+	
+	return temp;
+}
+
 void HariMain(void)
 {
 	unsigned char s[50];
@@ -50,6 +61,7 @@ void HariMain(void)
 	struct TSS32 tss_a, tss_b;
 	struct SEGMENT_DESCRIPTOR *gdt = (struct SEGMENT_DESCRIPTOR *)0x00270000;
 	struct TASK *task_a, *task_cons;
+	struct MOUSE_COODINATE test;
 	
 	static char keytable0[0x80] = {
 		0,   0,   '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '^', 0,   0,
@@ -90,6 +102,8 @@ void HariMain(void)
 	task_a = task_init(memman);
 	fifo.task = task_a;
 	task_run(task_a, 1, 2);
+	
+	test = getMouseCoodinate();
 	
 	/* sht_back */
 	sht_back = sheet_alloc(shtctl);

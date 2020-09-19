@@ -2,6 +2,7 @@
 
 #define NULL 0
 #define AR_CODE32_ER	0x409a
+#define AR_DATA32_RW	0x4092
 
 struct CONSOL_COMMAND_MEANING
 {
@@ -26,6 +27,8 @@ void commandRun(struct CONSOL_INFO *cons, int *fat, char *cmdline);
 void cons_newline(struct CONSOL_INFO *cons);
 void cons_putchar(struct CONSOL_INFO *cons, char chr, char move);
 int cmd_app(struct CONSOL_INFO *cons, int *fat, char *cmdline);
+void cons_putstr0(struct CONSOL_INFO *cons, char *s);
+void cons_putstr1(struct CONSOL_INFO *cons, char *s, int i);
 
 /* コマンドの意味 */
 struct CONSOL_COMMAND_MEANING commandMeaningTable[] =
@@ -35,6 +38,75 @@ struct CONSOL_COMMAND_MEANING commandMeaningTable[] =
 	,{"cls",  "Clear Consol Display"}
 	,{"type", "Contents of Specified file"}
 };
+
+int inthandler0d(int *esp)
+{
+	struct CONSOL_INFO *cons = (struct CONSOL_INFO *) *((int *)0x0fec);
+	struct TASK *task = task_now();
+	char s[30];
+	cons_putstr0(cons, "\nINT 0D :\n General Proteced Exception \n");
+	sprintf(s, "EIP = %08X\n", esp[11]);
+	cons_putstr0(cons, s);
+	return &(task->tss.esp0); /* 異常終了させる */
+}
+
+int inthandler0c(int *esp)
+{
+	struct CONSOL_INFO *cons = (struct CONSOL_INFO *) *((int *)0x0fec);
+	struct TASK *task = task_now();
+	char s[30];
+	cons_putstr0(cons, "\nINT 0C :\n Stack Exception \n");
+	sprintf(s, "EIP = %08X\n", esp[11]);
+	cons_putstr0(cons, s);
+	return &(task->tss.esp0); /* 異常終了させる */
+}
+
+int hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax)
+{
+	int csbase = *((int*)0xfe8);
+	struct TASK *task = task_now();
+	struct CONSOL_INFO *cons = (struct CONSOL_INFO *)*((int*)0x0fec);
+	if(edx == 1)
+	{
+		cons_putchar(cons, eax & 0xff, 1);
+	}
+	else if(edx == 2)
+	{
+		cons_putstr0(cons, (char *)ebx + csbase);
+	}
+	else if(edx == 3)
+	{
+		cons_putstr1(cons, (char *)ebx + csbase, ecx);
+	}
+	else if(edx == 4)
+	{
+		return &(task->tss.esp0);
+	}
+	
+	return 0;
+}
+
+void cons_putstr0(struct CONSOL_INFO *cons, char *s)
+{
+	for(; *s != 0; s++)
+	{
+		cons_putchar(cons, *s, 1);
+	}
+	
+	return;
+}
+
+void cons_putstr1(struct CONSOL_INFO *cons, char *s, int i)
+{
+	int j;
+	
+	for(j = 0; j < i; j++)
+	{
+		cons_putchar(cons, s[j], 1);
+	}
+	
+	return;
+}
 
 void cons_newline(struct CONSOL_INFO *cons)
 {
@@ -178,7 +250,8 @@ int cmd_app(struct CONSOL_INFO *cons, int *fat, char *cmdline)
 	struct MEMMAN *memman = (struct MEMMAN *)MEMMAN_ADDR;
 	struct FILEINFO *finfo;
 	struct SEGMENT_DESCRIPTOR *gdt = (struct SEGMENT_DESCRIPTOR *)0x00270000;
-	char name[18], *p;
+	char name[18], *p, *q;
+	struct TASK *task = task_now();
 	int i;
 	
 	/* コマンドラインからファイル名を生成 */
@@ -209,10 +282,23 @@ int cmd_app(struct CONSOL_INFO *cons, int *fat, char *cmdline)
 	if(finfo != 0)
 	{
 		p = (char *)memman_alloc_4k(memman, finfo->size);
+		q = (char *)memman_alloc_4k(memman, 64 * 1024);
+		*((int*)0xfe8) = (int)p;
 		file_loadfile(finfo->clustno, finfo->size, p, fat,(char *)(ADR_DISKIMG + 0x003e00));
-		set_segmdesc(gdt + 1003, finfo->size - 1, (int)p, AR_CODE32_ER);
-		farcall(0,1003*8);
+		set_segmdesc(gdt + 1003, finfo->size - 1, (int)p, AR_CODE32_ER + 0x60);
+		set_segmdesc(gdt + 1004, 64 * 1024 - 1, (int)q, AR_DATA32_RW + 0x60);
+		if(finfo->size >= 8 && strncmp(p + 4, "Hari", 4) == 0)
+		{
+			p[0] = 0xe8;
+			p[1] = 0x16;
+			p[2] = 0x00;
+			p[3] = 0x00;
+			p[4] = 0x00;
+			p[5] = 0xcb;
+		}
+		start_app(0, 1003 * 8, 1024 * 64, 1004 * 8, &(task->tss.esp0));
 		memman_free_4k(memman, (int)p, finfo->size);
+		memman_free_4k(memman, (int)q, 64 * 1024);
 		cons_newline(cons);
 		return 0;
 	}
@@ -268,13 +354,8 @@ int memExecute(struct CONSOL_INFO *cons)
 	}
 	
 	/* 全体のメモリ量と残量を表示する */
-	sprintf(s, "total  %dMB", memman->storage / (1024 * 1024));
-	putfont8_sht(cons->sht, 8, cons->cur_y, COL8_FFFFFF, COL8_000000, s,30);
-	cons_newline(cons);
-	sprintf(s, "free  %dKB", memman_total(memman) / 1024);
-	putfont8_sht(cons->sht, 8, cons->cur_y, COL8_FFFFFF, COL8_000000, s,30);
-	cons_newline(cons);
-	cons_newline(cons);
+	sprintf(s, "total  %dMB\nfree  %dKB\n\n", memman->storage / (1024 * 1024), memman_total(memman) / 1024);
+	cons_putstr0(cons, s);
 	
 	return 0;
 }
@@ -300,7 +381,7 @@ int dirExecute(struct CONSOL_INFO *cons)
 		{
 			if((fileInfo[x].type & 0x18) == 0) /* ファイルでない情報+ディレクトリでない場合 */
 			{
-				sprintf(s, "fileInfo.ext    %7d", fileInfo[x].size);
+				sprintf(s, "fileInfo.ext    %7d\n", fileInfo[x].size);
 				for(y = 0; y < 8; y++)
 				{
 					s[y] = fileInfo[x].name[y];
@@ -308,8 +389,7 @@ int dirExecute(struct CONSOL_INFO *cons)
 				s[9]  = fileInfo[x].ext[0];
 				s[10] = fileInfo[x].ext[1];
 				s[11] = fileInfo[x].ext[2];
-				putfont8_sht(cons->sht, 8, cons->cur_y, COL8_FFFFFF, COL8_000000, s,30);
-				cons_newline(cons);
+				cons_putstr0(cons, s);
 			}
 		}
 	}
@@ -349,9 +429,7 @@ int badExecute(struct CONSOL_INFO *cons)
 		return -1;
 	}
 	
-	putfont8_sht(cons->sht, 8, cons->cur_y, COL8_FFFFFF, COL8_000000, "Bad Command",30);
-	cons_newline(cons);
-	cons_newline(cons);
+	cons_putstr0(cons, "Bad Command\n\n");
 	
 	return 0;
 }
@@ -375,17 +453,13 @@ int typeExecute(struct CONSOL_INFO *cons, int *fat, char *cmdline)
 		/* ファイルが見つかった場合 */
 		p = (char *)memman_alloc_4k(memman, fileInfo->size);
 		file_loadfile(fileInfo->clustno, fileInfo->size, p, fat,(char *)(ADR_DISKIMG + 0x003e00));
-		for(y = 0; y < fileInfo->size; y++)
-		{
-			cons_putchar(cons, p[y], 1);
-		}
+		cons_putstr1(cons, p, fileInfo->size);
 		memman_free_4k(memman, (int)p, fileInfo->size);
 	}
 	else
 	{
 		/* ファイルが見つからなかった場合 */
-		putfont8_sht(cons->sht, 8, cons->cur_y, COL8_FFFFFF, COL8_000000, "File not found", 15);
-		cons_newline(cons);
+		cons_putstr0(cons, "File not found\n");
 	}
 	
 	cons_newline(cons);

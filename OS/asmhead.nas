@@ -181,7 +181,7 @@ GDT0:
 
 		DW		0
 GDTR0:
-		DW		8*3-1
+		DW		8*3 ; セグメントディスクリプタは64bitで8byte
 		DD		GDT0
 
 		ALIGNB	16

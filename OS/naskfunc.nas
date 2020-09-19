@@ -15,8 +15,9 @@
 		GLOBAL	_asm_inthandler21,_asm_inthandler2c,_asm_inthandler27,_asm_inthandler20
 		GLOBAL	_load_tr, _farjmp, _farcall
 		GLOBAL	_asm_cons_putchar
-		EXTERN	_inthandler21, _inthandler2c, _inthandler27,_inthandler20
-		EXTERN	_cons_putchar
+		GLOBAL	_asm_hrb_api,_start_app,_asm_inthandler0d, _asm_inthandler0c
+		EXTERN	_inthandler21, _inthandler2c, _inthandler27,_inthandler20, _inthandler0d, _inthandler0c
+		EXTERN	_cons_putchar, _hrb_api
 
 [SECTION .text]
 _load_tr:	; void load_tr(int tr)
@@ -149,12 +150,12 @@ _asm_inthandler2c:
 		PUSHAD
 		MOV		EAX, ESP
 		PUSH	EAX
-		MOV		AX, SS ; C言語の関数をコールする時は、SSレジスタに格納されている値にDSとESを合わせておく必要がある。
+		MOV		AX, SS
 		MOV		DS, AX
 		MOV		ES, AX
 		CALL	_inthandler2c
 		POP		EAX
-		POPAD	
+		POPAD
 		POP		DS
 		POP		ES
 		IRETD
@@ -165,37 +166,126 @@ _asm_inthandler27:
 		PUSHAD
 		MOV		EAX, ESP
 		PUSH	EAX
-		MOV		AX, SS ; C言語の関数をコールする時は、SSレジスタに格納されている値にDSとESを合わせておく必要がある。
+		MOV		AX, SS
 		MOV		DS, AX
 		MOV		ES, AX
 		CALL	_inthandler27
 		POP		EAX
-		POPAD	
+		POPAD
 		POP		DS
 		POP		ES
 		IRETD
-		
+
 _asm_inthandler20:
 		PUSH	ES
 		PUSH	DS
 		PUSHAD
 		MOV		EAX, ESP
 		PUSH	EAX
-		MOV		AX, SS ; C言語の関数をコールする時は、SSレジスタに格納されている値にDSとESを合わせておく必要がある。
+		MOV		AX, SS
 		MOV		DS, AX
 		MOV		ES, AX
 		CALL	_inthandler20
 		POP		EAX
-		POPAD	
+		POPAD
 		POP		DS
 		POP		ES
 		IRETD
+
 _asm_cons_putchar:
 		STI		;CPUは割り込み処理ルーチン扱いになるので、呼び出しと同時に自動でCLI命令が実行される。
+		PUSHAD
 		PUSH	1  ; move
 		AND		EAX, 0xff
 		PUSH	EAX; chr
 		PUSH	DWORD [0x0fec] ;メモリの内容を読み込んでそのままPUSHする
 		CALL	_cons_putchar
 		ADD		ESP, 12 ;スタックに積んだデータを捨てる
+		POPAD
+		IRETD
+		
+_start_app: ;void start_app(int eip, int cs, int esp, int ds, int *tss_esp);
+		PUSHAD ;32ビットレジスタを全部保持する(EAX、ECX、EDX、EBX、ESP、EBP、ESI、EDI)
+		MOV		EAX, [ESP + 36] ;アプリ用のEIP
+		MOV		ECX, [ESP + 40] ;アプリ用のCS
+		MOV		EDX, [ESP + 44] ;アプリ用のESP
+		MOV		EBX, [ESP + 48] ;アプリ用のDS/SS
+		MOV		EBP, [ESP + 52] ;tss.esp0の番地
+		MOV		[EBP], ESP	;OS用のESP
+		MOV		[EBP+4], SS	;OS用のSSを保存
+		MOV		ES, BX
+		MOV		DS, BX
+		MOV		FS, BX
+		MOV		GS, BX
+; 以下はRETFでアプリに行かせる為のスタック調整
+		OR		ECX, 3		;アプリ用のセグメント番号に3をORする
+		OR		EBX, 3		;アプリ用のセグメント番号に3をORする
+		PUSH	EBX			;アプリのSS
+		PUSH	EDX			;アプリのESP
+		PUSH	ECX			;アプリのCS
+		PUSH	EAX			;アプリのEIP
+		RETF
+;アプリが終了してもここにはこない
+
+_asm_hrb_api:
+		STI
+		PUSH	DS
+		PUSH	ES
+		PUSHAD		;保存の為のPUSH
+		PUSHAD		;hrb_apiに渡す為のPUSH
+		MOV		AX,SS
+		MOV		DS,AX		; OS用のセグメントをDSとESにも入れる
+		MOV		ES,AX
+		CALL	_hrb_api
+		CMP		EAX, 0
+		JNE		end_app
+		ADD		ESP, 32
+		POPAD
+		POP		ES
+		POP		DS
+		IRETD
+end_app:
+;EAXはtss.esp0の番地
+		MOV		ESP,[EAX]
+		POPAD
+		RET			;cmd_appに戻る
+
+_asm_inthandler0d:
+		STI
+		PUSH	ES
+		PUSH	DS
+		PUSHAD
+		MOV		EAX, ESP
+		PUSH	EAX
+		MOV		AX, SS
+		MOV		DS, AX
+		MOV		ES, AX
+		CALL	_inthandler0d
+		CMP		EAX, 0
+		JNE		end_app
+		POP		EAX
+		POPAD
+		POP		DS
+		POP		ES
+		ADD		ESP, 4		; INT 0x0dではこれが必要
+		IRETD
+
+_asm_inthandler0c:
+		STI
+		PUSH	ES
+		PUSH	DS
+		PUSHAD
+		MOV		EAX, ESP
+		PUSH	EAX
+		MOV		AX, SS
+		MOV		DS, AX
+		MOV		ES, AX
+		CALL	_inthandler0c
+		CMP		EAX, 0
+		JNE		end_app
+		POP		EAX
+		POPAD
+		POP		DS
+		POP		ES
+		ADD		ESP, 4		; INT 0x0cではこれが必要
 		IRETD

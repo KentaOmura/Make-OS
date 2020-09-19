@@ -66,6 +66,9 @@ void asm_inthandler21(void);
 void asm_inthandler27(void);
 void asm_inthandler2c(void);
 void asm_cons_putchar(void);
+void asm_hrb_api(void);
+void asm_inthandler0d(void);
+void asm_inthandler0c(void);
 
 /* graphic.c‚Ì’è‹`ŠÖ” */
 void init_palette(void);
@@ -281,7 +284,9 @@ struct FILEINFO
 
 /* consol.c */
 void consol_task(struct SHEET *sheet, unsigned int memtotal);
-
+void start_app(int eip, int cs, int esp, int ds, int *tss_esp);
+int inthandler0d(int *esp);
+int inthandler0c(int *esp);
 
 /* file.c */
 void file_loadfile(int clustno, int size, char *buf, int *fat, char *img);
