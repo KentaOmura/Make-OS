@@ -21,11 +21,10 @@ void memoryInit(struct MEMMAN *man, unsigned int memtotal);
 void hardWareInit(void);
 /* マウス座標が閾値を超えていれば丸め込む */
 void MouseCoodinateThreshold(struct MOUSE_COODINATE *mc, unsigned int screen_max_x, unsigned int screen_max_y);
-void makeWindow8(unsigned char* buf, int xsize, int ysize, char *title, int act);
 void make_wtitle8(unsigned char *buf, int xsize, char *title, char act);
-void putfont8_sht(struct SHEET *sht, int x, int y, int c, int b, char *s, int l);
 void makeTextbox8(struct SHEET *sht, int x0, int y0, int sx, int sy, int c);
-
+void keywin_off(struct SHEET *key_win);
+void keywin_on(struct SHEET *key_win);
 
 struct MOUSE_COODINATE getMouseCoodinate()
 {
@@ -43,24 +42,24 @@ void HariMain(void)
 
 	struct MOUSE_DEC mdec;
 	struct FIFO32 fifo;
-	int fifobuf[256];
+	int fifobuf[256], keycmd_buf[3], *cons_fifo[2];
 	struct MEMMAN *memman = (struct MEMMAN *)MEMMAN_ADDR;
 	/* 起動時の画面情報を取得 */
 	struct BOOT_INFO *binfo = (struct BOOT_INFO*)0x0ff0;
 	/* シート */
 	struct SHTCTL *shtctl;
-	struct SHEET *sht_back, *sht_mouse, *sht_win, *sht_cons;
+	struct SHEET *sht = 0, *key_win;
+	struct SHEET *sht_back, *sht_mouse, *sht_cons[2];
 	struct MOUSE_COODINATE mouseCoodinate; 
-	unsigned char *buf_back, buf_mouse[256], *buf_win, *buf_win_b, *buf_cons;
-	int i;
+	unsigned char *buf_back, buf_mouse[256], *buf_cons[2];
+	int i, j ,x, y;
+	int mmx = -1;
+	int mmy = -1;
+	int mmx2 = 0;
 	struct TIMER *timer;
-	int cursor_x, cursor_c;
 	int maxch;
-	int count = 0;
-	int keyto = 0, key_shift = 0, key_leds = (binfo->leds >> 4) & 7;
-	struct TSS32 tss_a, tss_b;
-	struct SEGMENT_DESCRIPTOR *gdt = (struct SEGMENT_DESCRIPTOR *)0x00270000;
-	struct TASK *task_a, *task_cons;
+	int key_shift = 0, key_leds = (binfo->leds >> 4) & 7;
+	struct TASK *task_a, *task_cons[2], *task;
 	struct MOUSE_COODINATE test;
 	
 	static char keytable0[0x80] = {
@@ -105,6 +104,9 @@ void HariMain(void)
 	
 	test = getMouseCoodinate();
 	
+	/* shtctlを保持 */
+	*((int*)0x0fe4) = (int)shtctl;
+	
 	/* sht_back */
 	sht_back = sheet_alloc(shtctl);
 	buf_back = (unsigned char*)memman_alloc_4k(memman, binfo->screen_x * binfo->screen_y);
@@ -116,38 +118,37 @@ void HariMain(void)
 	/* 下の式は、スタックであるtask_b_espに64KBのメモリを確保し、最後に64*1024を実施する事で、使用できるメモリの終端番地を指す事になる */
 	/* 最後に8を引くのは、taskBに引数を渡す為である。引数はESP+4に格納される事がC言語の決まりになっている。その決まりの為-4では確保したメモリを超える事になる。よって8 */
 	/* sht_cons */
-	sht_cons = sheet_alloc(shtctl);
-	buf_cons = (unsigned char*)memman_alloc_4k(memman,256*165);
-	sheet_setbuf(sht_cons, buf_cons, 256, 165, -1);
-	makeWindow8(buf_cons, 256, 165, "consols", 0);
-	makeTextbox8(sht_cons, 8, 28, 240, 128, COL8_000000);
-	task_cons = task_alloc();
-	task_cons->tss.esp = memman_alloc_4k(memman, 64 * 1024) + 64 * 1024 - 12;
-	task_cons->tss.eip = (int)&consol_task;
-	task_cons->tss.es = 1 * 8;
-	task_cons->tss.cs = 2 * 8;
-	task_cons->tss.ss = 1 * 8;
-	task_cons->tss.ds = 1 * 8;
-	task_cons->tss.fs = 1 * 8;
-	task_cons->tss.gs = 1 * 8;
-	*((int *) (task_cons->tss.esp + 4)) = (int)sht_cons;
-	*((int *) (task_cons->tss.esp + 8)) = (int)memman->storage;
-	task_run(task_cons, 2, 2);
+	for(i = 0; i < 2; i++)
+	{
+		sht_cons[i] = sheet_alloc(shtctl);
+		buf_cons[i] = (unsigned char*)memman_alloc_4k(memman,256*165);
+		sheet_setbuf(sht_cons[i], buf_cons[i], 256, 165, -1);
+		makeWindow8(buf_cons[i], 256, 165, "consols", 0);
+		makeTextbox8(sht_cons[i], 8, 28, 240, 128, COL8_000000);
+		task_cons[i] = task_alloc();
+		task_cons[i]->tss.esp = memman_alloc_4k(memman, 64 * 1024) + 64 * 1024 - 12;
+		task_cons[i]->tss.eip = (int)&consol_task;
+		task_cons[i]->tss.es = 1 * 8;
+		task_cons[i]->tss.cs = 2 * 8;
+		task_cons[i]->tss.ss = 1 * 8;
+		task_cons[i]->tss.ds = 1 * 8;
+		task_cons[i]->tss.fs = 1 * 8;
+		task_cons[i]->tss.gs = 1 * 8;
+		*((int *) (task_cons[i]->tss.esp + 4)) = (int)sht_cons[i];
+		*((int *) (task_cons[i]->tss.esp + 8)) = (int)memman->storage;
+		task_run(task_cons[i], 2, 2);
+		sht_cons[i]->task   = task_cons[i];
+		sht_cons[i]->flags |= 0x20; /* カーソルあり */
+		cons_fifo[i] = (int *)memman_alloc_4k(memman,128 * 4);
+		fifo32_init(&task_cons[i]->fifo, 128, cons_fifo[i], task_cons[i]);
+	}
 	
-	sht_win = sheet_alloc(shtctl);
-	buf_win = (unsigned char*)memman_alloc_4k(memman, 160*68);
-	sheet_setbuf(sht_win, buf_win, 160, 68, 88);	
-	makeWindow8(buf_win, 160,68,"task_a", 1);
-	makeTextbox8(sht_win, 8, 28, 144, 16, COL8_FFFFFF);
-
 	sht_mouse = sheet_alloc(shtctl);
 	sheet_setbuf(sht_mouse, buf_mouse, 8, 8, COL8_0000FF);
 	
 	/* マウスカーソルのデータを取得 */
 	init_mouse_cursol(buf_mouse, COL8_0000FF);
 	maxch = (144 - 8) / 8; /* 最大文字数 */
-	cursor_x = 8;
-	cursor_c = COL8_FFFFFF;
 	
 	timer = timer_alloc();
 	timer_init(timer, &fifo, 1);
@@ -158,19 +159,24 @@ void HariMain(void)
 	mouseCoodinate.my = (binfo->screen_y -28 - 8) / 2;
 	
 	sheet_slide(sht_back, 0, 0);
-	sheet_slide(sht_cons, 32, 120);
+	sheet_slide(sht_cons[1], 56, 6);
+	sheet_slide(sht_cons[0], 8, 2);
 	sheet_slide(sht_mouse, mouseCoodinate.mx, mouseCoodinate.my);
-	sheet_slide(sht_win, 80, 72);
 	sheet_updown(sht_back, 0);
-	sheet_updown(sht_cons, 1);
-	sheet_updown(sht_win, 4);
-	sheet_updown(sht_mouse, 5);
+	sheet_updown(sht_cons[1], 1);
+	sheet_updown(sht_cons[0], 2);
+	sheet_updown(sht_mouse, 3);
+	key_win = sht_cons[0];
+	keywin_on(key_win);
 	
 	while(1)
 	{
 		io_cli(); /* 割り込みを禁止する */
 		if(0 == fifo32_status(&fifo))
 		{
+			/* FIFOが空になったので、ため込んでいる描画処理を実施する */
+			//if()
+			
 			task_sleep(task_a); /* 他のタスクにCPUのリソースを割り振る */
 			io_sti();
 		}
@@ -178,7 +184,10 @@ void HariMain(void)
 		{
 			i = fifo32_get(&fifo); 
 			io_sti();
-			
+			if(key_win->flags == 0)
+			{
+				key_win = shtctl->sheets[shtctl->top - 1];
+			}
 			/* キーボードからのデータが格納されている場合 */
 			if(256 <= i && i <= 511)
 			{
@@ -214,21 +223,14 @@ void HariMain(void)
 				}
 				if(s[0] != 0)
 				{
-					if(keyto == 0)
-					{
-						if(count < maxch)
-						{
-							s[1] = 0;
-							putfont8_sht(sht_win, cursor_x, 28, COL8_000000, COL8_FFFFFF, s,1);
-							cursor_x += 8;
-							count++;
-						}
-					}
-					else
-					{
-						fifo32_put(&task_cons->fifo, s[0] + 256);
-					}
+					/* コンソールに送信 */
+					fifo32_put(&key_win->task->fifo, s[0] + 256);
 				}
+				if(i == 256 + 0x57 && shtctl->top > 2)
+				{
+					sheet_updown(shtctl->sheets[1], shtctl->top - 1);
+				}
+				
 				/* CapsLockの状態を更新する */
 				if(i == 256 + 0xba)
 				{
@@ -236,45 +238,23 @@ void HariMain(void)
 				}
 				if(i == 256 + 0x0e)
 				{
-					if(keyto == 0 && cursor_x > 8)
-					{
-						putfont8_sht(sht_win, cursor_x, 28, COL8_000000, COL8_FFFFFF, " ",1);
-						cursor_x -= 8;
-						count--;
-					}
-					else
-					{
-						fifo32_put(&task_cons->fifo, 8 + 256);
-					}
+					/* コンソールに送信 */
+					fifo32_put(&key_win->task->fifo, 8 + 256);
 				}
 				if(i == 256 + 0x1c)
 				{
-					if(keyto == 1)
-					{
-						fifo32_put(&task_cons->fifo, 0x1c + 256);
-					}
+					fifo32_put(&key_win->task->fifo, 0x1c + 256);
 				}
 				if(i == 256 + 0x0f)
 				{
-					if(keyto == 0)
+					keywin_off(key_win);
+					j = key_win->height - 1;
+					if(j == 0)
 					{
-						keyto = 1;
-						make_wtitle8(buf_win, sht_win->bxsize,"task_a", 0);
-						make_wtitle8(buf_cons, sht_cons->bxsize, "consols", 1);
-						cursor_c = -1;
-						boxfill8(sht_win->buf, sht_win->bxsize, COL8_FFFFFF, cursor_x, 28, cursor_x + 8, 44);
-						fifo32_put(&task_cons->fifo, 2); /* コンソールタスクの点滅を許可 */
+						j = shtctl->top - 1;
 					}
-					else
-					{
-						keyto = 0;
-						make_wtitle8(buf_win, sht_win->bxsize,"task_a", 1);
-						make_wtitle8(buf_cons, sht_cons->bxsize, "consols", 0);
-						cursor_c = COL8_000000;
-						fifo32_put(&task_cons->fifo, 3); /* コンソールタスクの点滅を禁止 */
-					}
-					sheet_refresh(sht_cons, 0, 0, sht_cons->bxsize, 21);
-					sheet_refresh(sht_win, 0, 0, sht_win->bxsize, 21);
+					key_win  = shtctl->sheets[j];
+					keywin_on(key_win);
 				}
 				if(i == 256 + 0x2a) /* 左シフトON */
 				{
@@ -292,11 +272,17 @@ void HariMain(void)
 				{
 					key_shift &= ~2;
 				}
-				if(cursor_c >= 0)
+				if(i == 256 + 0x3b && key_shift != 0)
 				{
-					boxfill8(sht_win->buf, sht_win->bxsize, cursor_c, cursor_x, 28, cursor_x + 8, 44);
+					task = key_win->task;
+					if(task != 0 && task->tss.ss0 != 0)
+					{
+						io_cli();
+						task->tss.eax = (int)&(task->tss.esp0);
+						task->tss.eip = (int)asm_end_app;
+						io_sti();
+					}
 				}
-				sheet_refresh(sht_win, cursor_x, 28, cursor_x + 8, 44);
 			}
 			/* マウスからのデータが格納されている場合 */
 			else if(512 <= i && i <= 767)
@@ -310,37 +296,86 @@ void HariMain(void)
 					sheet_slide(sht_mouse, mouseCoodinate.mx, mouseCoodinate.my);
 					if((mdec.btn & 0x01) != 0)
 					{
-						sheet_slide(sht_win, mouseCoodinate.mx - 80, mouseCoodinate.my - 8);
+						if(mmx < 0)
+						{
+							for(j = shtctl->top - 1; j > 0; j--)
+							{
+								sht = shtctl->sheets[j];
+								x = mouseCoodinate.mx - sht->vx0;
+								y = mouseCoodinate.my - sht->vy0;
+								if(0 <= x && x < sht->bxsize && 0 <= y && y < sht->bysize)
+								{
+									if(sht->buf[y * sht->bxsize + x] != sht->col_inv)
+									{
+										sheet_updown(sht, shtctl->top - 1);
+										if(sht != key_win)
+										{
+											keywin_off(key_win);
+											key_win = sht;
+											keywin_on(key_win);
+										}
+										/* ウインドウタイトルをクリックされているか */
+										if(3 <= x && x < sht->bxsize - 3 && 3 <= y && y < 21)
+										{
+											mmx = mouseCoodinate.mx;
+											mmy = mouseCoodinate.my;
+											mmx2 = sht->vx0;
+										}
+										/* ×をクリックしているか */
+										if(sht->bxsize - 21 <= x && x < sht->bxsize - 5 && 5 <= y && y < 19)
+										{
+											if((sht->flags & 0x10) != 0) /* アプリが作成したウインドう */
+											{
+												task = sht->task;
+												io_cli(); /* 強制終了中はタスク切り替えを禁止する */
+												task->tss.eax = (int)&(task->tss.esp0);
+												task->tss.eip = (int)asm_end_app;
+												io_sti();
+											}
+										}
+										break;
+									}
+								}
+							}
+						}
+						else
+						{
+							x = mouseCoodinate.mx - mmx;
+							y = mouseCoodinate.my - mmy;
+							sheet_slide(sht, (mmx2 + x + 2) & ~3, sht->vy0 + y);
+							mmy = mouseCoodinate.my;
+						}
 					}
-				}
-			}
-			else
-			{
-				if(i != 0)
-				{
-					timer_init(timer, &fifo, 0);
-					if(cursor_c >= 0)
+					else
 					{
-						cursor_c = COL8_000000;
+						mmx = -1;
 					}
-				}
-				else
-				{
-					timer_init(timer, &fifo, 1);
-					if(cursor_c >= 0)
-					{
-						cursor_c = COL8_FFFFFF;
-					}
-				}
-				timer_settime(timer, 50);
-				if(cursor_c >= 0)
-				{
-					boxfill8(sht_win->buf, sht_win->bxsize, cursor_c, cursor_x, 28, cursor_x + 8, 44);
-					sheet_refresh(sht_win, cursor_x, 28, cursor_x + 8, 44);
 				}
 			}
 		}
 	}
+}
+
+void keywin_off(struct SHEET *key_win)
+{
+	change_wtitle8(key_win, 0);
+	if((key_win->flags & 0x20) != 0)
+	{
+		fifo32_put(&key_win->task->fifo, 3);
+	}
+	
+	return;
+}
+
+void keywin_on(struct SHEET *key_win)
+{
+	change_wtitle8(key_win, 1);
+	if((key_win->flags & 0x20) != 0)
+	{
+		fifo32_put(&key_win->task->fifo, 2);
+	}
+	
+	return;
 }
 
 /* メモリの最大使用量のチェック */
@@ -358,7 +393,9 @@ unsigned int memoryUsage(struct MEMMAN *man)
 void memoryInit(struct MEMMAN *man, unsigned int memtotal)
 {
 	/* メモリ管理者の初期化 */
-	memman_init(man, memtotal);
+	memman_init(man);
+	man->storage = memtotal;
+	
 	/* メモリの使用量の設定 */
 	memman_free(man, 0x00001000, 0x0009e000);
 	memman_free(man, 0x00400000, memtotal-0x00400000);

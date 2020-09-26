@@ -8,6 +8,8 @@
 
 struct TIMERCTL timerctl;
 
+int timer_cancel(struct TIMER *timer);
+
 void init_pit(void)
 {
 	struct TIMER *t;
@@ -141,6 +143,7 @@ struct TIMER *timer_alloc(void)
 		if(timerctl.timers0[i].flags == 0)
 		{
 			timerctl.timers0[i].flags = TIMER_FLAGS_ALLOC;
+			timerctl.timers0[i].flags2 = 0;
 			return &timerctl.timers0[i];
 		}
 	}
@@ -150,13 +153,72 @@ struct TIMER *timer_alloc(void)
 
 void timer_free(struct TIMER *timers0)
 {
-	timers0->flags = 0;
+	timers0->flags  = 0;
+	timers0->flags2 = 0;
 	return;
 }
 
-void timer_init(struct TIMER *timers0, struct FIFO32 *fifo, unsigned char data)
+void timer_init(struct TIMER *timers0, struct FIFO32 *fifo, int data)
 {
 	timers0->fifo = fifo;
 	timers0->data = data;
 	return;
+}
+
+void timer_cancelall(struct FIFO32 *fifo)
+{
+	int e, i;
+	struct TIMER *t;
+
+	e = io_load_eflags();
+	io_cli();
+	for(i = 0; i< MAX_TIMER; i++)
+	{
+		t = &timerctl.timers0[i];
+		if(t->flags != 0 && t->flags2 != 0 && t->fifo == fifo)
+		{
+			timer_cancel(t);
+			timer_free(t);
+		}
+	}
+	io_store_eflags(e);
+	return;
+}
+
+int timer_cancel(struct TIMER *timer)
+{
+	int e;
+	struct TIMER *t;
+	
+	e = io_load_eflags();
+	io_cli(); /* タイマーの割り込みを禁止する */
+	if(timer->flags == TIMER_FLAGS_USING)
+	{
+		/* 先頭の場合 */
+		if(timer == timerctl.t0)
+		{
+			t = timer->next;
+			timerctl.t0   = t;
+			timerctl.next = t->timeout;
+		}
+		/* 先頭以外の場合 */
+		else
+		{
+			t = timerctl.t0;
+			while(1)
+			{
+				if(t->next == timer)
+				{
+					break;
+				}
+				t = t->next;
+			}
+			t->next = timer->next; /* timerの直前の次がtimerの次を指すようにする */
+		}
+		timer->flags = TIMER_FLAGS_ALLOC;
+		io_store_eflags(e);
+		return 1;
+	}
+	io_store_eflags(e);
+	return 0; /* キャンセル不要 */
 }

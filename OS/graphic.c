@@ -125,9 +125,22 @@ void init_palette(void)
 		0x00, 0x84, 0x84,		/* 暗い水色 */
 		0x84, 0x84, 0x84		/* 暗い灰色 */
 	};
-	
-	/* 色を設定する */
+
+	unsigned char table2[216 * 3];
+	int r, g, b;
 	set_palette(0, 15, table_rgb);
+	
+	for (b = 0; b < 6; b++) {
+		for (g = 0; g < 6; g++) {
+			for (r = 0; r < 6; r++) {
+				table2[(r + g * 6 + b * 36) * 3 + 0] = r * 51;
+				table2[(r + g * 6 + b * 36) * 3 + 1] = g * 51;
+				table2[(r + g * 6 + b * 36) * 3 + 2] = b * 51;
+			}
+		}
+	}
+	set_palette(16, 231, table2);
+	
 	return;
 }
 
@@ -138,9 +151,6 @@ void set_palette(int start, int end, unsigned char *rgb)
 	
 	eflags = io_load_eflags(); /* eflagsの内容を記憶する */
 	io_cli();				   /* CLIで割禁 */
-	
-	/* パレットを設定する */
-//	volatile unsigned char *port = 0x03c8;
 	
 	/* I/Oポート空間とメモリ空間は別の空間になるため（メモリマップドI/Oではない）、I/Oポートにアクセスする為には、IN、OUT命令が必要になる */
 	io_out8(0x03c8, start);

@@ -1,4 +1,5 @@
 #include"bootpack.h"
+//#include<string.h>
 
 #define NULL 0
 #define AR_CODE32_ER	0x409a
@@ -8,12 +9,6 @@ struct CONSOL_COMMAND_MEANING
 {
 	const char *name;
 	const char *mean;
-};
-
-struct CONSOL_INFO
-{
-	struct SHEET *sht;
-	int cur_x, cur_y, cur_c;
 };
 
 int memExecute(struct CONSOL_INFO *cons);
@@ -27,8 +22,9 @@ void commandRun(struct CONSOL_INFO *cons, int *fat, char *cmdline);
 void cons_newline(struct CONSOL_INFO *cons);
 void cons_putchar(struct CONSOL_INFO *cons, char chr, char move);
 int cmd_app(struct CONSOL_INFO *cons, int *fat, char *cmdline);
-void cons_putstr0(struct CONSOL_INFO *cons, char *s);
 void cons_putstr1(struct CONSOL_INFO *cons, char *s, int i);
+void hrb_api_linewin(struct SHEET *sht, int x0, int y0, int x1, int y1, int col);
+void putfont8_sht(struct SHEET *sht, int x, int y, int c, int b, char *s, int l);
 
 /* コマンドの意味 */
 struct CONSOL_COMMAND_MEANING commandMeaningTable[] =
@@ -39,10 +35,10 @@ struct CONSOL_COMMAND_MEANING commandMeaningTable[] =
 	,{"type", "Contents of Specified file"}
 };
 
-int inthandler0d(int *esp)
+int *inthandler0d(int *esp)
 {
-	struct CONSOL_INFO *cons = (struct CONSOL_INFO *) *((int *)0x0fec);
 	struct TASK *task = task_now();
+	struct CONSOL_INFO *cons = task->cons;
 	char s[30];
 	cons_putstr0(cons, "\nINT 0D :\n General Proteced Exception \n");
 	sprintf(s, "EIP = %08X\n", esp[11]);
@@ -50,10 +46,10 @@ int inthandler0d(int *esp)
 	return &(task->tss.esp0); /* 異常終了させる */
 }
 
-int inthandler0c(int *esp)
+int *inthandler0c(int *esp)
 {
-	struct CONSOL_INFO *cons = (struct CONSOL_INFO *) *((int *)0x0fec);
 	struct TASK *task = task_now();
+	struct CONSOL_INFO *cons = task->cons;
 	char s[30];
 	cons_putstr0(cons, "\nINT 0C :\n Stack Exception \n");
 	sprintf(s, "EIP = %08X\n", esp[11]);
@@ -61,29 +57,234 @@ int inthandler0c(int *esp)
 	return &(task->tss.esp0); /* 異常終了させる */
 }
 
-int hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax)
+int* hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax)
 {
-	int csbase = *((int*)0xfe8);
 	struct TASK *task = task_now();
-	struct CONSOL_INFO *cons = (struct CONSOL_INFO *)*((int*)0x0fec);
+	struct SHTCTL *shtctl = (struct SHTCTL *)*((int*)0x0fe4);
+	struct SHEET *sht;
+	int *reg = &eax + 1; /* reg[0]:edi reg[1]:esi reg[2]:ebp reg[3]:esp reg[4]:ebx reg[5]:edx
+							reg[6]:ecx reg[7]:eax */
+	int i;
+	int dsbase = task->dsbase;
+	struct CONSOL_INFO *cons = task->cons;
+	
 	if(edx == 1)
 	{
 		cons_putchar(cons, eax & 0xff, 1);
 	}
 	else if(edx == 2)
 	{
-		cons_putstr0(cons, (char *)ebx + csbase);
+		cons_putstr0(cons, (char *)ebx + dsbase);
+		/*cons_putstr0(cons, s);*/
 	}
 	else if(edx == 3)
 	{
-		cons_putstr1(cons, (char *)ebx + csbase, ecx);
+		cons_putstr1(cons, (char *)ebx + dsbase, ecx);
 	}
 	else if(edx == 4)
 	{
 		return &(task->tss.esp0);
 	}
+	else if(edx == 5)
+	{
+		sht = sheet_alloc(shtctl);
+		sht->task = task;
+		sht->flags |= 0x10;
+		sheet_setbuf(sht, (char*)ebx + dsbase, esi, edi, eax);
+		makeWindow8((char*)ebx + dsbase, esi,edi,(char*)ecx + dsbase, 0);
+		sheet_slide(sht,((shtctl->xsize - esi) / 2) & 3, (shtctl->ysize - edi) / 2);
+		sheet_updown(sht, shtctl->top);
+		reg[7] = (int)sht; 
+	}
+	else if(edx == 6)
+	{
+		sht = (struct SHEET*)ebx;
+		putstr8_asc(sht->buf, sht->bxsize, esi, edi, eax, (char*)ebp + dsbase);
+		sheet_refresh(sht,esi,edi,esi + ecx * 8, edi + 16);
+	}
+	else if(edx == 7)
+	{
+		sht = (struct SHEET*)ebx;
+		boxfill8(sht->buf, sht->bxsize, ebp, esi, edi, eax, ecx);
+		sheet_refresh(sht,esi,edi,eax + 1, ecx + 1);
+	}
+	else if(edx == 8)
+	{
+		memman_init((struct MEMMAN*)(ebx + dsbase));
+		ecx &= 0xfffffff0; /* 16byte単位 */
+		memman_free((struct MEMMAN*)(ebx + dsbase), eax, ecx);
+	}
+	else if(edx == 9)
+	{
+		ecx = (ecx + 0x0f) & 0xfffffff0;
+		reg[7] = memman_alloc((struct MEMMAN*)(ebx + dsbase), ecx); /* 確保したメモリ領域の番地をEAXレジスタに格納する */
+	}
+	else if(edx == 10)
+	{
+		ecx = (ecx + 0x0f) & 0xfffffff0;
+		memman_free((struct MEMMAN*)(ebx + dsbase), eax, ecx);
+	}
+	else if(edx == 11)
+	{
+		sht = (struct SHEET *)ebx;
+		sht->buf[sht->bxsize * edi + esi] = eax;
+	}
+	else if(edx == 12)
+	{
+		sht = (struct SHEET *)ebx;
+		sheet_refresh(sht, eax, ecx, esi, edi);
+	}
+	else if(edx == 13)
+	{
+		sht = (struct SHEET *)ebx;
+		hrb_api_linewin(sht, eax, ecx, esi, edi, ebp);
+	}
+	else if(edx == 14)
+	{
+		sheet_free((struct SHEET*)ebx);
+	}
+	else if(edx == 15)
+	{
+		while(1)
+		{
+			io_cli();
+			if(fifo32_status(&task->fifo) == 0)
+			{
+				if(eax != 0)
+				{
+					task_sleep(task); /* FIFOが空 */
+				}
+				else
+				{
+					io_sti();
+					reg[7] = -1;
+					return 0;
+				}
+			}
+			i = fifo32_get(&task->fifo);
+			io_sti();
+			if(i <= 1)
+			{
+				timer_init(cons->timer, &task->fifo,1);
+				timer_settime(cons->timer, 50);
+			}
+			if(i == 2)
+			{
+				cons->cur_c = COL8_FFFFFF;
+			}
+			if(i == 3)
+			{
+				cons->cur_c = -1;
+			}
+			if (i >= 256) { /* キーボードデータ（タスクA経由）など */
+				reg[7] = i - 256;
+				return 0;
+			}
+		}
+	}
+	else if (edx == 16)
+	{
+		reg[7] = (int) timer_alloc();
+		((struct TIMER*)reg[7])->flags2 = 1;
+	}
+	else if (edx == 17)
+	{
+		timer_init((struct TIMER *) ebx, &task->fifo, eax + 256);
+	}
+	else if (edx == 18)
+	{
+		timer_settime((struct TIMER *) ebx, eax);
+	}
+	else if (edx == 19)
+	{
+		timer_free((struct TIMER *) ebx);
+	}
+	else if(edx == 20)
+	{
+		if(eax == 0)
+		{
+			i = io_in8(0x61);
+			io_out8(0x61, i & 0x0d);
+		}
+		else
+		{
+			i = 1193180000 / eax; /* pitのクロック数は1.19318Mhz固定 */
+			io_out8(0x43, 0xb6);
+			io_out8(0x42, i & 0xff);
+			io_out8(0x42, i >> 8);
+			i = io_in8(0x61);
+			io_out8(0x61, (i | 0x03) & 0x0f);
+		}
+	}
 	
 	return 0;
+}
+
+void hrb_api_linewin(struct SHEET *sht, int x0, int y0, int x1, int y1, int col)
+{
+	int i, x, y, len, dx, dy;
+	
+	dx = x1 - x0;
+	dy = y1 - y0;
+	x = x0 << 10;
+	y = y0 << 10;
+	if(dx < 0)
+	{
+		dx = -dx;
+	}
+	if(dy < 0)
+	{
+		dy = -dy;
+	}
+	if(dx >= dy)
+	{
+		len = dx + 1;
+		if(x0 > x1)
+		{
+			dx = -1024;
+		}
+		else
+		{
+			dx = 1024;
+		}
+		if(y0 <= y1)
+		{
+			dy = ((y1- y0 + 1) << 10) / len; /* 一次関数の傾き */
+		}
+		else
+		{
+			dy = ((y1- y0 - 1) << 10) / len;
+		}
+	}
+	else
+	{
+		len = dy + 1;
+		if(y0 > y1)
+		{
+			dy = -1024;
+		}
+		else
+		{
+			dy = 1024;
+		}
+		if(x0 <= x1)
+		{
+			dx = ((x1- x0 + 1) << 10) / len;
+		}
+		else
+		{
+			dx = ((x1- x0 - 1) << 10) / len;
+		}
+	}
+	
+	for(i = 0; i < len; i++)
+	{
+		sht->buf[(y >> 10) * sht->bxsize + (x >> 10)] = col;
+		x += dx;
+		y += dy;
+	}
+	
+	return;
 }
 
 void cons_putstr0(struct CONSOL_INFO *cons, char *s)
@@ -143,24 +344,22 @@ void cons_newline(struct CONSOL_INFO *cons)
 
 void consol_task(struct SHEET *sheet, unsigned int memtotal)
 {
-	struct TIMER *timer;
 	struct TASK *task = task_now(); /* スリープ処理に必要な為、自分自身のタスクを知る必要がある */
 	struct MEMMAN *memman = (struct MEMMAN *)MEMMAN_ADDR;
 	struct CONSOL_INFO cons;
 	unsigned char cmdline[30];
-	int i, fifo_buf[128];
+	int i;
 	int *fat = (int *)memman_alloc_4k(memman, 4 * 2880);
 	
 	cons.sht = sheet;
 	cons.cur_x = 8;
 	cons.cur_y = 28;
 	cons.cur_c = -1;
-	*((int *)0x0fec) = (int)&cons;
+	task->cons = &cons;
 	
-	fifo32_init(&task->fifo, 128, fifo_buf, task);
-	timer = timer_alloc();
-	timer_init(timer, &task->fifo, 1);
-	timer_settime(timer, 50); /* 0.5秒でタイマーを張る */
+	cons.timer = timer_alloc();
+	timer_init(cons.timer, &task->fifo, 1);
+	timer_settime(cons.timer, 50); /* 0.5秒でタイマーを張る */
 	file_readfat(fat, (unsigned char *)(ADR_DISKIMG + 0x000200));
 
 	cons_putchar(&cons, '>', 1);
@@ -181,7 +380,7 @@ void consol_task(struct SHEET *sheet, unsigned int memtotal)
 			{
 				if(0 != i)
 				{
-					timer_init(timer, &task->fifo, 0);
+					timer_init(cons.timer, &task->fifo, 0);
 					if(cons.cur_c >= 0)
 					{
 						cons.cur_c = COL8_FFFFFF; /* 白 */
@@ -189,13 +388,13 @@ void consol_task(struct SHEET *sheet, unsigned int memtotal)
 				}
 				else
 				{
-					timer_init(timer, &task->fifo, 1);
+					timer_init(cons.timer, &task->fifo, 1);
 					if(cons.cur_c >= 0)
 					{
 						cons.cur_c = COL8_000000; /* 黒 */
 					}
 				}
-				timer_settime(timer, 50);
+				timer_settime(cons.timer, 50);
 			}
 			else if(2 == i) /* 点滅を許可 */
 			{
@@ -252,8 +451,11 @@ int cmd_app(struct CONSOL_INFO *cons, int *fat, char *cmdline)
 	struct SEGMENT_DESCRIPTOR *gdt = (struct SEGMENT_DESCRIPTOR *)0x00270000;
 	char name[18], *p, *q;
 	struct TASK *task = task_now();
+	int segsize, datasize,esp, datahrb;
 	int i;
-	
+	struct SHEET *sht;
+	struct SHTCTL *shtctl;
+
 	/* コマンドラインからファイル名を生成 */
 	for(i = 0; i < 13; i++)
 	{
@@ -282,23 +484,40 @@ int cmd_app(struct CONSOL_INFO *cons, int *fat, char *cmdline)
 	if(finfo != 0)
 	{
 		p = (char *)memman_alloc_4k(memman, finfo->size);
-		q = (char *)memman_alloc_4k(memman, 64 * 1024);
-		*((int*)0xfe8) = (int)p;
 		file_loadfile(finfo->clustno, finfo->size, p, fat,(char *)(ADR_DISKIMG + 0x003e00));
-		set_segmdesc(gdt + 1003, finfo->size - 1, (int)p, AR_CODE32_ER + 0x60);
-		set_segmdesc(gdt + 1004, 64 * 1024 - 1, (int)q, AR_DATA32_RW + 0x60);
-		if(finfo->size >= 8 && strncmp(p + 4, "Hari", 4) == 0)
+		if(finfo->size >= 36 && strncmp(p + 4, "Hari", 4) == 0 && *p == 0x00)
 		{
-			p[0] = 0xe8;
-			p[1] = 0x16;
-			p[2] = 0x00;
-			p[3] = 0x00;
-			p[4] = 0x00;
-			p[5] = 0xcb;
+			segsize  = *((int*)(p + 0x0000)); /* データセグメントの大きさ */
+			esp      = *((int*)(p + 0x000c)); /* ESPの初期値&データ部分の転送先番地 */
+			datasize = *((int*)(p + 0x0010)); /* hrbファイル内のデータ部分の大きさ */
+			datahrb  = *((int*)(p + 0x0014)); /* hrbファイル内のデータ部分がどこから始まるのか */
+			q = (char *)memman_alloc_4k(memman, segsize);
+			task->dsbase = (int)q;
+			set_segmdesc(gdt + task->sel / 8 + 1000, finfo->size - 1, (int)p, AR_CODE32_ER + 0x60);
+			set_segmdesc(gdt + task->sel / 8 + 2000, segsize - 1, (int)q, AR_DATA32_RW + 0x60);
+			for(i = 0;i < datasize; i++)
+			{
+				q[esp + i] = p[datahrb + i];
+			}
+			start_app(0x1b, task->sel + 1000 * 8, esp, task->sel + 2000 * 8, &(task->tss.esp0));
+			shtctl = (struct SHTCTL*)*((int*)0x0fe4);
+			for(i = 0; i < MAX_SHEETS; i++)
+			{
+				sht = &(shtctl->sheets0[i]);
+				if((sht->flags & 0x11) == 0x11 && sht->task == task)
+				{
+					/* アプリが開きっぱなしにしたウインドを閉じる */
+					sheet_free(sht);
+				}
+			}
+			timer_cancelall(&task->fifo);
+			memman_free_4k(memman, (int)q, segsize);
 		}
-		start_app(0, 1003 * 8, 1024 * 64, 1004 * 8, &(task->tss.esp0));
+		else
+		{
+			cons_putstr0(cons, ".hrb file format error.\n");
+		}
 		memman_free_4k(memman, (int)p, finfo->size);
-		memman_free_4k(memman, (int)q, 64 * 1024);
 		cons_newline(cons);
 		return 0;
 	}
@@ -436,11 +655,8 @@ int badExecute(struct CONSOL_INFO *cons)
 
 int typeExecute(struct CONSOL_INFO *cons, int *fat, char *cmdline)
 {
-	unsigned char s[15]; /* ファイル名格納用 */
 	struct FILEINFO *fileInfo = file_search(cmdline + 5, (struct FILEINFO *)(ADR_DISKIMG + 0x002600), 224); /* 224はファイルの格納限界数 */
 	struct MEMMAN *memman = (struct MEMMAN *)MEMMAN_ADDR;
-	int x, y;
-	int search = 0;
 	char *p;
 	
 	if(NULL == cons || fat == NULL || cmdline == NULL)
@@ -477,9 +693,9 @@ int helpExecute(struct CONSOL_INFO *cons)
 	
 	for(i = 0; i < sizeof(commandMeaningTable)/sizeof(struct CONSOL_COMMAND_MEANING); i++)
 	{
-		putfont8_sht(cons->sht, 8, cons->cur_y, COL8_FFFFFF, COL8_000000, commandMeaningTable[i].name, 30);
+	//	putfont8_sht(cons->sht, 8, cons->cur_y, COL8_FFFFFF, COL8_000000, commandMeaningTable[i].name, 30);
 		cons_newline(cons);
-		putfont8_sht(cons->sht, 8, cons->cur_y, COL8_FFFFFF, COL8_000000, commandMeaningTable[i].mean, 30);
+	//	putfont8_sht(cons->sht, 8, cons->cur_y, COL8_FFFFFF, COL8_000000, commandMeaningTable[i].mean, 30);
 		cons_newline(cons);
 	}
 	

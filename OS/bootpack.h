@@ -50,7 +50,6 @@ struct GATE_DESCRIPTOR
 #define AR_TSS32 0x0089
 #define ADR_GDT  0x00270000
 
-
 /* アセンブラコード */
 void io_hlt(void);
 void io_cli(void);
@@ -69,6 +68,8 @@ void asm_cons_putchar(void);
 void asm_hrb_api(void);
 void asm_inthandler0d(void);
 void asm_inthandler0c(void);
+void asm_end_app(void);
+void farcall(int eip, int cs);
 
 /* graphic.cの定義関数 */
 void init_palette(void);
@@ -77,7 +78,6 @@ void boxfill8(unsigned char *vram, int xsize, unsigned char color, int start_x, 
 void putfont8(char *vram, int xsize, int index_x, int index_y, char color, char* font);
 void putstr8_asc(char *vram, int xsize, int index_x, int index_y, int color, unsigned char *str);
 void init_mouse_cursol(char* mouse, char col);
-void putstr8_asc(char *vram, int xsize, int index_x, int index_y, int color, unsigned char *str);
 
 #define AR_INTGATE32 0x008e /* 割り込みが有効である事を指す値 */
 
@@ -106,7 +106,7 @@ struct MEMMAN
 	struct FREEINFO free[MEMMAN_FREES];
 };
 unsigned int memtest(unsigned int start, unsigned int end);
-void memman_init(struct MEMMAN *man, unsigned int memtotal);
+void memman_init(struct MEMMAN *man);
 unsigned int memman_total(struct MEMMAN *man);
 unsigned int memman_alloc(struct MEMMAN *man, unsigned int size);
 int memman_free(struct MEMMAN *man, unsigned int addr, unsigned int size);
@@ -177,6 +177,7 @@ struct SHEET
 	unsigned char *buf;
 	int bxsize, bysize, vx0, vy0, col_inv, height, flags;
 	struct SHTCTL *ctl;
+	struct TASK *task;
 };
 
 #define MAX_SHEETS 256
@@ -199,7 +200,8 @@ void sheet_refresh(struct SHEET *sht, int bx0, int by0, int bx1, int by1);
 void sheet_slide(struct SHEET *sht, int vx0, int vy0);
 void sheet_free(struct SHEET *sht);
 
-
+/* bootpack.cの定義関数 */
+void makeWindow8(unsigned char* buf, int xsize, int ysize, char *title, int act);
 
 /* timer,cの定義 */
 #define MAX_TIMER 500
@@ -207,7 +209,8 @@ void sheet_free(struct SHEET *sht);
 struct TIMER
 {
 	struct TIMER *next;
-	unsigned int timeout, flags;
+	unsigned int timeout;
+	char flags, flags2;
 	struct FIFO32 *fifo;
 	int data;
 };
@@ -224,7 +227,21 @@ void init_pit(void);
 void timer_settime(struct TIMER *timer, unsigned int timeout);
 struct TIMER *timer_alloc(void);
 void timer_free(struct TIMER *timer);
-void timer_init(struct TIMER *timer, struct FIFO32 *fifo, unsigned char data);
+void timer_init(struct TIMER *timer, struct FIFO32 *fifo, int data);
+void timer_cancelall(struct FIFO32 *fifo);
+
+/* consol.c */
+struct CONSOL_INFO
+{
+	struct SHEET *sht;
+	int cur_x, cur_y, cur_c;
+	struct TIMER *timer;
+};
+void consol_task(struct SHEET *sheet, unsigned int memtotal);
+void start_app(int eip, int cs, int esp, int ds, int *tss_esp);
+int *inthandler0d(int *esp);
+int *inthandler0c(int *esp);
+void cons_putstr0(struct CONSOL_INFO *cons, char *s);
 
 /* mtask.c */
 #define MAX_TASKS      1000
@@ -247,6 +264,8 @@ struct TASK
 	int priority, level;
 	struct FIFO32 fifo;
 	struct TSS32 tss;
+	struct CONSOL_INFO *cons;
+	int dsbase;
 };
 
 struct TASKLEVEL
@@ -272,6 +291,7 @@ struct TASK *task_now(void);
 void task_add(struct TASK *task);
 void task_remove(struct TASK *task);
 void task_switchsub(void);
+void task_sleep(struct TASK *task);
 
 
 struct FILEINFO
@@ -282,13 +302,11 @@ struct FILEINFO
 	unsigned int size; /* ファイルサイズ */
 };
 
-/* consol.c */
-void consol_task(struct SHEET *sheet, unsigned int memtotal);
-void start_app(int eip, int cs, int esp, int ds, int *tss_esp);
-int inthandler0d(int *esp);
-int inthandler0c(int *esp);
-
 /* file.c */
 void file_loadfile(int clustno, int size, char *buf, int *fat, char *img);
 void file_readfat(int *fat, unsigned char *img);
 struct FILEINFO *file_search(char *name, struct FILEINFO *finfo, int max);
+
+/* window.c */
+void change_wtitle8(struct SHEET *sht, char act);
+

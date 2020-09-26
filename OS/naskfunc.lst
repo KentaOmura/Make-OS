@@ -16,276 +16,283 @@
     16 00000000                                 		GLOBAL	_load_tr, _farjmp, _farcall
     17 00000000                                 		GLOBAL	_asm_cons_putchar
     18 00000000                                 		GLOBAL	_asm_hrb_api,_start_app,_asm_inthandler0d, _asm_inthandler0c
-    19 00000000                                 		EXTERN	_inthandler21, _inthandler2c, _inthandler27,_inthandler20, _inthandler0d, _inthandler0c
-    20 00000000                                 		EXTERN	_cons_putchar, _hrb_api
-    21 00000000                                 
-    22                                          [SECTION .text]
-    23 00000000                                 _load_tr:	; void load_tr(int tr)
-    24 00000000 0F 00 5C 24 04                  		LTR		[ESP+4]		;tr
-    25 00000005 C3                              		RET
-    26 00000006                                 
-    27 00000006                                 _farjmp:		;void farjmp(int eip, int cs)
-    28 00000006 FF 6C 24 04                     		JMP		FAR	[ESP+4] ;eip, cs
-    29 0000000A C3                              		RET
-    30 0000000B                                 
-    31 0000000B                                 _farcall:		;void farcall(int eip, int cs)
-    32 0000000B FF 5C 24 04                     		CALL	FAR	[ESP+4] ;eip, cs
-    33 0000000F C3                              		RET
-    34 00000010                                 
-    35 00000010                                 _io_hlt:	; void io_hlt(void);
-    36 00000010 F4                              		HLT
-    37 00000011 C3                              		RET
-    38 00000012                                 
-    39 00000012                                 _io_cli:
-    40 00000012 FA                              		CLI
-    41 00000013 C3                              		RET
-    42 00000014                                 
-    43 00000014                                 _io_sti:
-    44 00000014 FB                              		STI
-    45 00000015 C3                              		RET
-    46 00000016                                 
-    47 00000016                                 _io_stihlt:
-    48 00000016 FB                              		STI
-    49 00000017 F4                              		HLT
-    50 00000018 C3                              		RET
-    51 00000019                                 
-    52 00000019                                 _io_in8:	; int io_in8(int port);
-    53 00000019 8B 54 24 04                     		MOV		EDX,[ESP+4]		; port
-    54 0000001D B8 00000000                     		MOV		EAX,0
-    55 00000022 EC                              		IN		AL,DX
-    56 00000023 C3                              		RET
-    57 00000024                                 
-    58 00000024                                 _io_out8:
-    59 00000024 8B 54 24 04                     		MOV		EDX, [ESP+4]
-    60 00000028 8A 44 24 08                     		MOV		AL, [ESP+8] ;8bit用だからALを使用している
-    61 0000002C EE                              		OUT		DX, AL
-    62 0000002D C3                              		RET
-    63 0000002E                                 		
-    64 0000002E                                 _io_load_eflags:
-    65 0000002E 9C                              		PUSHFD
-    66 0000002F 58                              		POP		EAX
-    67 00000030 C3                              		RET
-    68 00000031                                 		
-    69 00000031                                 _io_store_eflags:
-    70 00000031 8B 44 24 04                     		MOV		EAX, [ESP+4]
-    71 00000035 50                              		PUSH	EAX
-    72 00000036 9D                              		POPFD
-    73 00000037 C3                              		RET
-    74 00000038                                 
-    75 00000038                                 _load_cr0: ; int load_cr0(void)
-    76 00000038 0F 20 C0                        		MOV		EAX, CR0
-    77 0000003B C3                              		RET
-    78 0000003C                                 
-    79 0000003C                                 _store_cr0: ;void store_cr0(int cr0)
-    80 0000003C 8B 44 24 04                     		MOV		EAX, [ESP+4]
-    81 00000040 0F 22 C0                        		MOV		CR0, EAX
-    82 00000043 C3                              		RET
-    83 00000044                                 
-    84 00000044                                 _load_gdtr:
-    85 00000044 66 8B 44 24 04                  		MOV		AX, [ESP+4] ; limitは16bitで表現できる
-    86 00000049 66 89 44 24 06                  		MOV		[ESP+6], AX ; addressは32bitでESP+8から格納されている。CPUがリトルエンディアンなのでこれで良い。
-    87 0000004E 0F 01 54 24 06                  		LGDT	[ESP+6]
-    88 00000053 C3                              		RET
-    89 00000054                                 
-    90 00000054                                 _load_idtr: ;GDTと同じ
-    91 00000054 66 8B 44 24 04                  		MOV		AX, [ESP+4]
-    92 00000059 66 89 44 24 06                  		MOV		[ESP+6], AX
-    93 0000005E 0F 01 5C 24 06                  		LIDT	[ESP+6]
-    94 00000063 C3                              		RET
-    95 00000064                                 
-    96 00000064                                 _memtest_sub: ; unsigned int memtest_sub(unsigned int start, unsigned int end)
-    97 00000064 57                              		PUSH	EDI
-    98 00000065 56                              		PUSH	ESI
-    99 00000066 53                              		PUSH	EBX
-   100 00000067 BE AA55AA55                     		MOV		ESI, 0xaa55aa55 ;pat0 = 0xaa55aa55
-   101 0000006C BF 55AA55AA                     		MOV		EDI, 0x55aa55aa ;pat1 = 0x55aa55aa
-   102 00000071 8B 44 24 10                     		MOV		EAX, [ESP+12+4] ;i = start PUSHを3回実施しているので、スタックポインタは4 * 3の12バイト進んでいる
-   103 00000075                                 
-   104 00000075                                 mts_loop:
-   105 00000075 89 C3                           		MOV		EBX, EAX
-   106 00000077 81 C3 00000FFC                  		ADD		EBX, 0xffc  ; p = i + 0xffc
-   107 0000007D 8B 13                           		MOV		EDX, [EBX]  ; old = *p
-   108 0000007F 89 33                           		MOV		[EBX], ESI  ; *p = pat0
-   109 00000081 83 33 FF                        		XOR		DWORD [EBX], 0xffffffff ;*p ^= 0xffffffff
-   110 00000084 3B 3B                           		CMP		EDI, [EBX]	;if(*p != pat1) goto fin
-   111 00000086 75 18                           		JNE		mts_fin
-   112 00000088 83 33 FF                        		XOR		DWORD [EBX], 0xffffffff ;*p ^= 0xffffffff
-   113 0000008B 3B 33                           		CMP		ESI, [EBX]  ;if(*p != pat0) goto fin
-   114 0000008D 75 11                           		JNE		mts_fin
-   115 0000008F 89 13                           		MOV		[EBX], EDX	; *p = old
-   116 00000091 05 00001000                     		ADD		EAX, 0x1000	;i += 0x1000
-   117 00000096 3B 44 24 14                     		CMP		EAX, [ESP+12+8] ; if(i <= end) goto mts_loop
-   118 0000009A 75 D9                           		JNE		mts_loop
-   119 0000009C 5B                              		POP		EBX
-   120 0000009D 5E                              		POP		ESI
-   121 0000009E 5F                              		POP		EDI
-   122 0000009F C3                              		RET
-   123 000000A0                                 		
-   124 000000A0                                 mts_fin:
-   125 000000A0 89 13                           		MOV		[EBX], EDX ; *p = old
-   126 000000A2 5B                              		POP		EBX
-   127 000000A3 5E                              		POP		ESI
-   128 000000A4 5F                              		POP		EDI
-   129 000000A5 C3                              		RET
-   130 000000A6                                 		
-   131 000000A6                                 _asm_inthandler21:
-   132 000000A6 06                              		PUSH	ES
-   133 000000A7 1E                              		PUSH	DS
-   134 000000A8 60                              		PUSHAD
-   135 000000A9 89 E0                           		MOV		EAX, ESP
-   136 000000AB 50                              		PUSH	EAX
-   137 000000AC 66 8C D0                        		MOV		AX, SS ; C言語の関数をコールする時は、SSレジスタに格納されている値にDSとESを合わせておく必要がある。
-   138 000000AF 8E D8                           		MOV		DS, AX
-   139 000000B1 8E C0                           		MOV		ES, AX
-   140 000000B3 E8 [00000000]                   		CALL	_inthandler21
-   141 000000B8 58                              		POP		EAX
-   142 000000B9 61                              		POPAD	
-   143 000000BA 1F                              		POP		DS
-   144 000000BB 07                              		POP		ES
-   145 000000BC CF                              		IRETD
-   146 000000BD                                 		
-   147 000000BD                                 _asm_inthandler2c:
-   148 000000BD 06                              		PUSH	ES
-   149 000000BE 1E                              		PUSH	DS
-   150 000000BF 60                              		PUSHAD
-   151 000000C0 89 E0                           		MOV		EAX, ESP
-   152 000000C2 50                              		PUSH	EAX
-   153 000000C3 66 8C D0                        		MOV		AX, SS
-   154 000000C6 8E D8                           		MOV		DS, AX
-   155 000000C8 8E C0                           		MOV		ES, AX
-   156 000000CA E8 [00000000]                   		CALL	_inthandler2c
-   157 000000CF 58                              		POP		EAX
-   158 000000D0 61                              		POPAD
-   159 000000D1 1F                              		POP		DS
-   160 000000D2 07                              		POP		ES
-   161 000000D3 CF                              		IRETD
-   162 000000D4                                 		
-   163 000000D4                                 _asm_inthandler27:
-   164 000000D4 06                              		PUSH	ES
-   165 000000D5 1E                              		PUSH	DS
-   166 000000D6 60                              		PUSHAD
-   167 000000D7 89 E0                           		MOV		EAX, ESP
-   168 000000D9 50                              		PUSH	EAX
-   169 000000DA 66 8C D0                        		MOV		AX, SS
-   170 000000DD 8E D8                           		MOV		DS, AX
-   171 000000DF 8E C0                           		MOV		ES, AX
-   172 000000E1 E8 [00000000]                   		CALL	_inthandler27
-   173 000000E6 58                              		POP		EAX
-   174 000000E7 61                              		POPAD
-   175 000000E8 1F                              		POP		DS
-   176 000000E9 07                              		POP		ES
-   177 000000EA CF                              		IRETD
-   178 000000EB                                 
-   179 000000EB                                 _asm_inthandler20:
-   180 000000EB 06                              		PUSH	ES
-   181 000000EC 1E                              		PUSH	DS
-   182 000000ED 60                              		PUSHAD
-   183 000000EE 89 E0                           		MOV		EAX, ESP
-   184 000000F0 50                              		PUSH	EAX
-   185 000000F1 66 8C D0                        		MOV		AX, SS
-   186 000000F4 8E D8                           		MOV		DS, AX
-   187 000000F6 8E C0                           		MOV		ES, AX
-   188 000000F8 E8 [00000000]                   		CALL	_inthandler20
-   189 000000FD 58                              		POP		EAX
-   190 000000FE 61                              		POPAD
-   191 000000FF 1F                              		POP		DS
-   192 00000100 07                              		POP		ES
-   193 00000101 CF                              		IRETD
-   194 00000102                                 
-   195 00000102                                 _asm_cons_putchar:
-   196 00000102 FB                              		STI		;CPUは割り込み処理ルーチン扱いになるので、呼び出しと同時に自動でCLI命令が実行される。
-   197 00000103 60                              		PUSHAD
-   198 00000104 6A 01                           		PUSH	1  ; move
-   199 00000106 25 000000FF                     		AND		EAX, 0xff
-   200 0000010B 50                              		PUSH	EAX; chr
-   201 0000010C FF 35 00000FEC                  		PUSH	DWORD [0x0fec] ;メモリの内容を読み込んでそのままPUSHする
-   202 00000112 E8 [00000000]                   		CALL	_cons_putchar
-   203 00000117 83 C4 0C                        		ADD		ESP, 12 ;スタックに積んだデータを捨てる
-   204 0000011A 61                              		POPAD
-   205 0000011B CF                              		IRETD
-   206 0000011C                                 		
-   207 0000011C                                 _start_app: ;void start_app(int eip, int cs, int esp, int ds, int *tss_esp);
-   208 0000011C 60                              		PUSHAD ;32ビットレジスタを全部保持する(EAX、ECX、EDX、EBX、ESP、EBP、ESI、EDI)
-   209 0000011D 8B 44 24 24                     		MOV		EAX, [ESP + 36] ;アプリ用のEIP
-   210 00000121 8B 4C 24 28                     		MOV		ECX, [ESP + 40] ;アプリ用のCS
-   211 00000125 8B 54 24 2C                     		MOV		EDX, [ESP + 44] ;アプリ用のESP
-   212 00000129 8B 5C 24 30                     		MOV		EBX, [ESP + 48] ;アプリ用のDS/SS
-   213 0000012D 8B 6C 24 34                     		MOV		EBP, [ESP + 52] ;tss.esp0の番地
-   214 00000131 89 65 00                        		MOV		[EBP], ESP	;OS用のESP
-   215 00000134 8C 55 04                        		MOV		[EBP+4], SS	;OS用のSSを保存
-   216 00000137 8E C3                           		MOV		ES, BX
-   217 00000139 8E DB                           		MOV		DS, BX
-   218 0000013B 8E E3                           		MOV		FS, BX
-   219 0000013D 8E EB                           		MOV		GS, BX
-   220 0000013F                                 ; 以下はRETFでアプリに行かせる為のスタック調整
-   221 0000013F 83 C9 03                        		OR		ECX, 3		;アプリ用のセグメント番号に3をORする
-   222 00000142 83 CB 03                        		OR		EBX, 3		;アプリ用のセグメント番号に3をORする
-   223 00000145 53                              		PUSH	EBX			;アプリのSS
-   224 00000146 52                              		PUSH	EDX			;アプリのESP
-   225 00000147 51                              		PUSH	ECX			;アプリのCS
-   226 00000148 50                              		PUSH	EAX			;アプリのEIP
-   227 00000149 CB                              		RETF
-   228 0000014A                                 ;アプリが終了してもここにはこない
-   229 0000014A                                 
-   230 0000014A                                 _asm_hrb_api:
-   231 0000014A FB                              		STI
-   232 0000014B 1E                              		PUSH	DS
-   233 0000014C 06                              		PUSH	ES
-   234 0000014D 60                              		PUSHAD		;保存の為のPUSH
-   235 0000014E 60                              		PUSHAD		;hrb_apiに渡す為のPUSH
-   236 0000014F 66 8C D0                        		MOV		AX,SS
-   237 00000152 8E D8                           		MOV		DS,AX		; OS用のセグメントをDSとESにも入れる
-   238 00000154 8E C0                           		MOV		ES,AX
-   239 00000156 E8 [00000000]                   		CALL	_hrb_api
-   240 0000015B 83 F8 00                        		CMP		EAX, 0
-   241 0000015E 75 07                           		JNE		end_app
-   242 00000160 83 C4 20                        		ADD		ESP, 32
-   243 00000163 61                              		POPAD
-   244 00000164 07                              		POP		ES
-   245 00000165 1F                              		POP		DS
-   246 00000166 CF                              		IRETD
-   247 00000167                                 end_app:
-   248 00000167                                 ;EAXはtss.esp0の番地
-   249 00000167 8B 20                           		MOV		ESP,[EAX]
-   250 00000169 61                              		POPAD
-   251 0000016A C3                              		RET			;cmd_appに戻る
-   252 0000016B                                 
-   253 0000016B                                 _asm_inthandler0d:
-   254 0000016B FB                              		STI
-   255 0000016C 06                              		PUSH	ES
-   256 0000016D 1E                              		PUSH	DS
-   257 0000016E 60                              		PUSHAD
-   258 0000016F 89 E0                           		MOV		EAX, ESP
-   259 00000171 50                              		PUSH	EAX
-   260 00000172 66 8C D0                        		MOV		AX, SS
-   261 00000175 8E D8                           		MOV		DS, AX
-   262 00000177 8E C0                           		MOV		ES, AX
-   263 00000179 E8 [00000000]                   		CALL	_inthandler0d
-   264 0000017E 83 F8 00                        		CMP		EAX, 0
-   265 00000181 75 E4                           		JNE		end_app
-   266 00000183 58                              		POP		EAX
-   267 00000184 61                              		POPAD
-   268 00000185 1F                              		POP		DS
-   269 00000186 07                              		POP		ES
-   270 00000187 83 C4 04                        		ADD		ESP, 4		; INT 0x0dではこれが必要
-   271 0000018A CF                              		IRETD
-   272 0000018B                                 
-   273 0000018B                                 _asm_inthandler0c:
-   274 0000018B FB                              		STI
-   275 0000018C 06                              		PUSH	ES
-   276 0000018D 1E                              		PUSH	DS
-   277 0000018E 60                              		PUSHAD
-   278 0000018F 89 E0                           		MOV		EAX, ESP
-   279 00000191 50                              		PUSH	EAX
-   280 00000192 66 8C D0                        		MOV		AX, SS
-   281 00000195 8E D8                           		MOV		DS, AX
-   282 00000197 8E C0                           		MOV		ES, AX
-   283 00000199 E8 [00000000]                   		CALL	_inthandler0c
-   284 0000019E 83 F8 00                        		CMP		EAX, 0
-   285 000001A1 75 C4                           		JNE		end_app
-   286 000001A3 58                              		POP		EAX
-   287 000001A4 61                              		POPAD
-   288 000001A5 1F                              		POP		DS
-   289 000001A6 07                              		POP		ES
-   290 000001A7 83 C4 04                        		ADD		ESP, 4		; INT 0x0cではこれが必要
-   291 000001AA CF                              		IRETD
+    19 00000000                                 		GLOBAL	_asm_end_app
+    20 00000000                                 		EXTERN	_inthandler21, _inthandler2c, _inthandler27,_inthandler20, _inthandler0d, _inthandler0c
+    21 00000000                                 		EXTERN	_cons_putchar, _hrb_api
+    22 00000000                                 
+    23                                          [SECTION .text]
+    24 00000000                                 _load_tr:	; void load_tr(int tr)
+    25 00000000 0F 00 5C 24 04                  		LTR		[ESP+4]		;tr
+    26 00000005 C3                              		RET
+    27 00000006                                 
+    28 00000006                                 _farjmp:		;void farjmp(int eip, int cs)
+    29 00000006 FF 6C 24 04                     		JMP		FAR	[ESP+4] ;eip, cs
+    30 0000000A C3                              		RET
+    31 0000000B                                 
+    32 0000000B                                 _farcall:		;void farcall(int eip, int cs)
+    33 0000000B FF 5C 24 04                     		CALL	FAR	[ESP+4] ;eip, cs
+    34 0000000F C3                              		RET
+    35 00000010                                 
+    36 00000010                                 _io_hlt:	; void io_hlt(void);
+    37 00000010 F4                              		HLT
+    38 00000011 C3                              		RET
+    39 00000012                                 
+    40 00000012                                 _io_cli:
+    41 00000012 FA                              		CLI
+    42 00000013 C3                              		RET
+    43 00000014                                 
+    44 00000014                                 _io_sti:
+    45 00000014 FB                              		STI
+    46 00000015 C3                              		RET
+    47 00000016                                 
+    48 00000016                                 _io_stihlt:
+    49 00000016 FB                              		STI
+    50 00000017 F4                              		HLT
+    51 00000018 C3                              		RET
+    52 00000019                                 
+    53 00000019                                 _io_in8:	; int io_in8(int port);
+    54 00000019 8B 54 24 04                     		MOV		EDX,[ESP+4]		; port
+    55 0000001D B8 00000000                     		MOV		EAX,0
+    56 00000022 EC                              		IN		AL,DX
+    57 00000023 C3                              		RET
+    58 00000024                                 
+    59 00000024                                 _io_out8:
+    60 00000024 8B 54 24 04                     		MOV		EDX, [ESP+4]
+    61 00000028 8A 44 24 08                     		MOV		AL, [ESP+8] ;8bit用だからALを使用している
+    62 0000002C EE                              		OUT		DX, AL
+    63 0000002D C3                              		RET
+    64 0000002E                                 		
+    65 0000002E                                 _io_load_eflags:
+    66 0000002E 9C                              		PUSHFD
+    67 0000002F 58                              		POP		EAX
+    68 00000030 C3                              		RET
+    69 00000031                                 		
+    70 00000031                                 _io_store_eflags:
+    71 00000031 8B 44 24 04                     		MOV		EAX, [ESP+4]
+    72 00000035 50                              		PUSH	EAX
+    73 00000036 9D                              		POPFD
+    74 00000037 C3                              		RET
+    75 00000038                                 
+    76 00000038                                 _load_cr0: ; int load_cr0(void)
+    77 00000038 0F 20 C0                        		MOV		EAX, CR0
+    78 0000003B C3                              		RET
+    79 0000003C                                 
+    80 0000003C                                 _store_cr0: ;void store_cr0(int cr0)
+    81 0000003C 8B 44 24 04                     		MOV		EAX, [ESP+4]
+    82 00000040 0F 22 C0                        		MOV		CR0, EAX
+    83 00000043 C3                              		RET
+    84 00000044                                 
+    85 00000044                                 _load_gdtr:
+    86 00000044 66 8B 44 24 04                  		MOV		AX, [ESP+4] ; limitは16bitで表現できる
+    87 00000049 66 89 44 24 06                  		MOV		[ESP+6], AX ; addressは32bitでESP+8から格納されている。CPUがリトルエンディアンなのでこれで良い。
+    88 0000004E 0F 01 54 24 06                  		LGDT	[ESP+6]
+    89 00000053 C3                              		RET
+    90 00000054                                 
+    91 00000054                                 _load_idtr: ;GDTと同じ
+    92 00000054 66 8B 44 24 04                  		MOV		AX, [ESP+4]
+    93 00000059 66 89 44 24 06                  		MOV		[ESP+6], AX
+    94 0000005E 0F 01 5C 24 06                  		LIDT	[ESP+6]
+    95 00000063 C3                              		RET
+    96 00000064                                 
+    97 00000064                                 _memtest_sub: ; unsigned int memtest_sub(unsigned int start, unsigned int end)
+    98 00000064 57                              		PUSH	EDI
+    99 00000065 56                              		PUSH	ESI
+   100 00000066 53                              		PUSH	EBX
+   101 00000067 BE AA55AA55                     		MOV		ESI, 0xaa55aa55 ;pat0 = 0xaa55aa55
+   102 0000006C BF 55AA55AA                     		MOV		EDI, 0x55aa55aa ;pat1 = 0x55aa55aa
+   103 00000071 8B 44 24 10                     		MOV		EAX, [ESP+12+4] ;i = start PUSHを3回実施しているので、スタックポインタは4 * 3の12バイト進んでいる
+   104 00000075                                 
+   105 00000075                                 mts_loop:
+   106 00000075 89 C3                           		MOV		EBX, EAX
+   107 00000077 81 C3 00000FFC                  		ADD		EBX, 0xffc  ; p = i + 0xffc
+   108 0000007D 8B 13                           		MOV		EDX, [EBX]  ; old = *p
+   109 0000007F 89 33                           		MOV		[EBX], ESI  ; *p = pat0
+   110 00000081 83 33 FF                        		XOR		DWORD [EBX], 0xffffffff ;*p ^= 0xffffffff
+   111 00000084 3B 3B                           		CMP		EDI, [EBX]	;if(*p != pat1) goto fin
+   112 00000086 75 18                           		JNE		mts_fin
+   113 00000088 83 33 FF                        		XOR		DWORD [EBX], 0xffffffff ;*p ^= 0xffffffff
+   114 0000008B 3B 33                           		CMP		ESI, [EBX]  ;if(*p != pat0) goto fin
+   115 0000008D 75 11                           		JNE		mts_fin
+   116 0000008F 89 13                           		MOV		[EBX], EDX	; *p = old
+   117 00000091 05 00001000                     		ADD		EAX, 0x1000	;i += 0x1000
+   118 00000096 3B 44 24 14                     		CMP		EAX, [ESP+12+8] ; if(i <= end) goto mts_loop
+   119 0000009A 75 D9                           		JNE		mts_loop
+   120 0000009C 5B                              		POP		EBX
+   121 0000009D 5E                              		POP		ESI
+   122 0000009E 5F                              		POP		EDI
+   123 0000009F C3                              		RET
+   124 000000A0                                 		
+   125 000000A0                                 mts_fin:
+   126 000000A0 89 13                           		MOV		[EBX], EDX ; *p = old
+   127 000000A2 5B                              		POP		EBX
+   128 000000A3 5E                              		POP		ESI
+   129 000000A4 5F                              		POP		EDI
+   130 000000A5 C3                              		RET
+   131 000000A6                                 		
+   132 000000A6                                 _asm_inthandler21:
+   133 000000A6 06                              		PUSH	ES
+   134 000000A7 1E                              		PUSH	DS
+   135 000000A8 60                              		PUSHAD
+   136 000000A9 89 E0                           		MOV		EAX, ESP
+   137 000000AB 50                              		PUSH	EAX
+   138 000000AC 66 8C D0                        		MOV		AX, SS ; C言語の関数をコールする時は、SSレジスタに格納されている値にDSとESを合わせておく必要がある。
+   139 000000AF 8E D8                           		MOV		DS, AX
+   140 000000B1 8E C0                           		MOV		ES, AX
+   141 000000B3 E8 [00000000]                   		CALL	_inthandler21
+   142 000000B8 58                              		POP		EAX
+   143 000000B9 61                              		POPAD	
+   144 000000BA 1F                              		POP		DS
+   145 000000BB 07                              		POP		ES
+   146 000000BC CF                              		IRETD
+   147 000000BD                                 		
+   148 000000BD                                 _asm_inthandler2c:
+   149 000000BD 06                              		PUSH	ES
+   150 000000BE 1E                              		PUSH	DS
+   151 000000BF 60                              		PUSHAD
+   152 000000C0 89 E0                           		MOV		EAX, ESP
+   153 000000C2 50                              		PUSH	EAX
+   154 000000C3 66 8C D0                        		MOV		AX, SS
+   155 000000C6 8E D8                           		MOV		DS, AX
+   156 000000C8 8E C0                           		MOV		ES, AX
+   157 000000CA E8 [00000000]                   		CALL	_inthandler2c
+   158 000000CF 58                              		POP		EAX
+   159 000000D0 61                              		POPAD
+   160 000000D1 1F                              		POP		DS
+   161 000000D2 07                              		POP		ES
+   162 000000D3 CF                              		IRETD
+   163 000000D4                                 		
+   164 000000D4                                 _asm_inthandler27:
+   165 000000D4 06                              		PUSH	ES
+   166 000000D5 1E                              		PUSH	DS
+   167 000000D6 60                              		PUSHAD
+   168 000000D7 89 E0                           		MOV		EAX, ESP
+   169 000000D9 50                              		PUSH	EAX
+   170 000000DA 66 8C D0                        		MOV		AX, SS
+   171 000000DD 8E D8                           		MOV		DS, AX
+   172 000000DF 8E C0                           		MOV		ES, AX
+   173 000000E1 E8 [00000000]                   		CALL	_inthandler27
+   174 000000E6 58                              		POP		EAX
+   175 000000E7 61                              		POPAD
+   176 000000E8 1F                              		POP		DS
+   177 000000E9 07                              		POP		ES
+   178 000000EA CF                              		IRETD
+   179 000000EB                                 
+   180 000000EB                                 _asm_inthandler20:
+   181 000000EB 06                              		PUSH	ES
+   182 000000EC 1E                              		PUSH	DS
+   183 000000ED 60                              		PUSHAD
+   184 000000EE 89 E0                           		MOV		EAX, ESP
+   185 000000F0 50                              		PUSH	EAX
+   186 000000F1 66 8C D0                        		MOV		AX, SS
+   187 000000F4 8E D8                           		MOV		DS, AX
+   188 000000F6 8E C0                           		MOV		ES, AX
+   189 000000F8 E8 [00000000]                   		CALL	_inthandler20
+   190 000000FD 58                              		POP		EAX
+   191 000000FE 61                              		POPAD
+   192 000000FF 1F                              		POP		DS
+   193 00000100 07                              		POP		ES
+   194 00000101 CF                              		IRETD
+   195 00000102                                 
+   196 00000102                                 _asm_cons_putchar:
+   197 00000102 FB                              		STI		;CPUは割り込み処理ルーチン扱いになるので、呼び出しと同時に自動でCLI命令が実行される。
+   198 00000103 60                              		PUSHAD
+   199 00000104 6A 01                           		PUSH	1  ; move
+   200 00000106 25 000000FF                     		AND		EAX, 0xff ;ALに文字コードが入った状態にする。AH以上の上位ビットは0
+   201 0000010B 50                              		PUSH	EAX; chr
+   202 0000010C FF 35 00000FEC                  		PUSH	DWORD [0x0fec] ;メモリの内容を読み込んでそのままPUSHする
+   203 00000112 E8 [00000000]                   		CALL	_cons_putchar
+   204 00000117 83 C4 0C                        		ADD		ESP, 12 ;スタックに積んだデータを捨てる
+   205 0000011A 61                              		POPAD
+   206 0000011B CF                              		IRETD
+   207 0000011C                                 		
+   208 0000011C                                 _start_app: ;void start_app(int eip, int cs, int esp, int ds, int *tss_esp);
+   209 0000011C 60                              		PUSHAD ;32ビットレジスタを全部保持する(EAX、ECX、EDX、EBX、ESP、EBP、ESI、EDI)
+   210 0000011D 8B 44 24 24                     		MOV		EAX, [ESP + 36] ;アプリ用のEIP
+   211 00000121 8B 4C 24 28                     		MOV		ECX, [ESP + 40] ;アプリ用のCS
+   212 00000125 8B 54 24 2C                     		MOV		EDX, [ESP + 44] ;アプリ用のESP
+   213 00000129 8B 5C 24 30                     		MOV		EBX, [ESP + 48] ;アプリ用のDS/SS
+   214 0000012D 8B 6C 24 34                     		MOV		EBP, [ESP + 52] ;tss.esp0の番地
+   215 00000131 89 65 00                        		MOV		[EBP], ESP	;OS用のESP
+   216 00000134 8C 55 04                        		MOV		[EBP+4], SS	;OS用のSSを保存
+   217 00000137 8E C3                           		MOV		ES, BX
+   218 00000139 8E DB                           		MOV		DS, BX
+   219 0000013B 8E E3                           		MOV		FS, BX
+   220 0000013D 8E EB                           		MOV		GS, BX
+   221 0000013F                                 ; 以下はRETFでアプリに行かせる為のスタック調整
+   222 0000013F 83 C9 03                        		OR		ECX, 3		;アプリ用のセグメント番号に3をORする
+   223 00000142 83 CB 03                        		OR		EBX, 3		;アプリ用のセグメント番号に3をORする
+   224 00000145 53                              		PUSH	EBX			;アプリのSS
+   225 00000146 52                              		PUSH	EDX			;アプリのESP
+   226 00000147 51                              		PUSH	ECX			;アプリのCS
+   227 00000148 50                              		PUSH	EAX			;アプリのEIP
+   228 00000149 CB                              		RETF
+   229 0000014A                                 ;アプリが終了してもここにはこない
+   230 0000014A                                 
+   231 0000014A                                 _asm_hrb_api:
+   232 0000014A FB                              		STI
+   233 0000014B 1E                              		PUSH	DS
+   234 0000014C 06                              		PUSH	ES
+   235 0000014D 60                              		PUSHAD		;保存の為のPUSH
+   236 0000014E 60                              		PUSHAD		;hrb_apiに渡す為のPUSH
+   237 0000014F 66 8C D0                        		MOV		AX,SS
+   238 00000152 8E D8                           		MOV		DS,AX		; OS用のセグメントをDSとESにも入れる
+   239 00000154 8E C0                           		MOV		ES,AX
+   240 00000156 E8 [00000000]                   		CALL	_hrb_api
+   241 0000015B 83 F8 00                        		CMP		EAX, 0
+   242 0000015E 75 07                           		JNE		end_app
+   243 00000160 83 C4 20                        		ADD		ESP, 32
+   244 00000163 61                              		POPAD
+   245 00000164 07                              		POP		ES
+   246 00000165 1F                              		POP		DS
+   247 00000166 CF                              		IRETD
+   248 00000167                                 end_app:
+   249 00000167                                 ;EAXはtss.esp0の番地
+   250 00000167 8B 20                           		MOV		ESP,[EAX]
+   251 00000169 61                              		POPAD
+   252 0000016A C3                              		RET			;cmd_appに戻る
+   253 0000016B                                 
+   254 0000016B                                 _asm_inthandler0d:
+   255 0000016B FB                              		STI
+   256 0000016C 06                              		PUSH	ES
+   257 0000016D 1E                              		PUSH	DS
+   258 0000016E 60                              		PUSHAD
+   259 0000016F 89 E0                           		MOV		EAX, ESP
+   260 00000171 50                              		PUSH	EAX
+   261 00000172 66 8C D0                        		MOV		AX, SS
+   262 00000175 8E D8                           		MOV		DS, AX
+   263 00000177 8E C0                           		MOV		ES, AX
+   264 00000179 E8 [00000000]                   		CALL	_inthandler0d
+   265 0000017E 83 F8 00                        		CMP		EAX, 0
+   266 00000181 75 E4                           		JNE		end_app
+   267 00000183 58                              		POP		EAX
+   268 00000184 61                              		POPAD
+   269 00000185 1F                              		POP		DS
+   270 00000186 07                              		POP		ES
+   271 00000187 83 C4 04                        		ADD		ESP, 4		; INT 0x0dではこれが必要
+   272 0000018A CF                              		IRETD
+   273 0000018B                                 
+   274 0000018B                                 _asm_inthandler0c:
+   275 0000018B FB                              		STI
+   276 0000018C 06                              		PUSH	ES
+   277 0000018D 1E                              		PUSH	DS
+   278 0000018E 60                              		PUSHAD
+   279 0000018F 89 E0                           		MOV		EAX, ESP
+   280 00000191 50                              		PUSH	EAX
+   281 00000192 66 8C D0                        		MOV		AX, SS
+   282 00000195 8E D8                           		MOV		DS, AX
+   283 00000197 8E C0                           		MOV		ES, AX
+   284 00000199 E8 [00000000]                   		CALL	_inthandler0c
+   285 0000019E 83 F8 00                        		CMP		EAX, 0
+   286 000001A1 75 C4                           		JNE		end_app
+   287 000001A3 58                              		POP		EAX
+   288 000001A4 61                              		POPAD
+   289 000001A5 1F                              		POP		DS
+   290 000001A6 07                              		POP		ES
+   291 000001A7 83 C4 04                        		ADD		ESP, 4		; INT 0x0cではこれが必要
+   292 000001AA CF                              		IRETD
+   293 000001AB                                 
+   294 000001AB                                 _asm_end_app:
+   295 000001AB 8B 20                           		MOV		ESP,[EAX]
+   296 000001AD C7 40 04 00000000               		MOV		DWORD [EAX + 4],0
+   297 000001B4 61                              		POPAD
+   298 000001B5 C3                              		RET

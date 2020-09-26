@@ -1,0 +1,39 @@
+text size :    622(0x0026E)
+data size :     12(0x0000C)
+bss  size :      0(0x00000)
+
+0x00000024 : (.text)
+0x00000024 : _HariMain
+0x000000BE : (.text)
+0x000000BE : _api_putstr0
+0x000000CC : _api_putchar
+0x000000D8 : _api_end
+0x000000DF : _api_openwin
+0x00000101 : _api_putstrwin
+0x00000129 : _api_boxfilwin
+0x00000151 : _api_initmalloc
+0x00000172 : _api_malloc
+0x00000187 : _api_free
+0x000001A0 : _api_point
+0x000001BE : _api_refreshwin
+0x000001E0 : _api_linewin
+0x00000208 : _api_closewin
+0x00000216 : _api_getkey
+0x00000222 : _api_alloctimer
+0x0000022A : _api_inittimer
+0x0000023C : _api_settimer
+0x0000024E : _api_freetimer
+0x0000025C : _api_beep
+0x00000268 : (.text)
+0x00000268 : _HariStartup
+0x00000271 : _rand
+0x00000271 : (.text)
+0x00000000 : (.data)
+0x00000000 : (.data)
+0x00010000 : (.data)
+0x00010008 : (.data)
+0x00010008 : _rand_seed
+0x00000000 : (.bss)
+0x00000000 : (.bss)
+0x00000000 : (.bss)
+0x00000000 : (.bss)

@@ -16,6 +16,7 @@
 		GLOBAL	_load_tr, _farjmp, _farcall
 		GLOBAL	_asm_cons_putchar
 		GLOBAL	_asm_hrb_api,_start_app,_asm_inthandler0d, _asm_inthandler0c
+		GLOBAL	_asm_end_app
 		EXTERN	_inthandler21, _inthandler2c, _inthandler27,_inthandler20, _inthandler0d, _inthandler0c
 		EXTERN	_cons_putchar, _hrb_api
 
@@ -196,7 +197,7 @@ _asm_cons_putchar:
 		STI		;CPUは割り込み処理ルーチン扱いになるので、呼び出しと同時に自動でCLI命令が実行される。
 		PUSHAD
 		PUSH	1  ; move
-		AND		EAX, 0xff
+		AND		EAX, 0xff ;ALに文字コードが入った状態にする。AH以上の上位ビットは0
 		PUSH	EAX; chr
 		PUSH	DWORD [0x0fec] ;メモリの内容を読み込んでそのままPUSHする
 		CALL	_cons_putchar
@@ -289,3 +290,9 @@ _asm_inthandler0c:
 		POP		ES
 		ADD		ESP, 4		; INT 0x0cではこれが必要
 		IRETD
+
+_asm_end_app:
+		MOV		ESP,[EAX]
+		MOV		DWORD [EAX + 4],0
+		POPAD
+		RET

@@ -1,0 +1,84 @@
+     1 00000000                                 [FORMAT "WCOFF"]
+     2 00000000                                 [INSTRSET "i486p"]
+     3 00000000                                 [OPTIMIZE 1]
+     4 00000000                                 [OPTION 1]
+     5 00000000                                 [BITS 32]
+     6 00000000                                 	EXTERN	_sheet_refresh
+     7 00000000                                 [FILE "window.c"]
+     8                                          [SECTION .text]
+     9 00000000                                 	GLOBAL	_change_wtitle8
+    10 00000000                                 _change_wtitle8:
+    11 00000000 55                              	PUSH	EBP
+    12 00000001 89 E5                           	MOV	EBP,ESP
+    13 00000003 57                              	PUSH	EDI
+    14 00000004 56                              	PUSH	ESI
+    15 00000005 53                              	PUSH	EBX
+    16 00000006 83 EC 14                        	SUB	ESP,20
+    17 00000009 8B 45 08                        	MOV	EAX,DWORD [8+EBP]
+    18 0000000C 80 7D 0C 00                     	CMP	BYTE [12+EBP],0
+    19 00000010 8B 10                           	MOV	EDX,DWORD [EAX]
+    20 00000012 8B 48 04                        	MOV	ECX,DWORD [4+EAX]
+    21 00000015 89 55 E4                        	MOV	DWORD [-28+EBP],EDX
+    22 00000018 0F 84 00000082                  	JE	L2
+    23 0000001E C6 45 EB 07                     	MOV	BYTE [-21+EBP],7
+    24 00000022 C6 45 EA 0B                     	MOV	BYTE [-22+EBP],11
+    25 00000026 C6 45 E9 08                     	MOV	BYTE [-23+EBP],8
+    26 0000002A C6 45 E8 0F                     	MOV	BYTE [-24+EBP],15
+    27 0000002E                                 L3:
+    28 0000002E 6B F9 03                        	IMUL	EDI,ECX,3
+    29 00000031 C7 45 EC 00000011               	MOV	DWORD [-20+EBP],17
+    30 00000038 89 7D E0                        	MOV	DWORD [-32+EBP],EDI
+    31 0000003B                                 L16:
+    32 0000003B C7 45 F0 00000003               	MOV	DWORD [-16+EBP],3
+    33 00000042 39 4D F0                        	CMP	DWORD [-16+EBP],ECX
+    34 00000045 7F 26                           	JG	L20
+    35 00000047 8B 45 E4                        	MOV	EAX,DWORD [-28+EBP]
+    36 0000004A 8B 55 E0                        	MOV	EDX,DWORD [-32+EBP]
+    37 0000004D 8D 74 38 03                     	LEA	ESI,DWORD [3+EAX+EDI*1]
+    38 00000051 8D 5C 10 03                     	LEA	EBX,DWORD [3+EAX+EDX*1]
+    39 00000055                                 L15:
+    40 00000055 8A 13                           	MOV	DL,BYTE [EBX]
+    41 00000057 3A 55 E9                        	CMP	DL,BYTE [-23+EBP]
+    42 0000005A 74 37                           	JE	L21
+    43 0000005C                                 L12:
+    44 0000005C 3A 55 E8                        	CMP	DL,BYTE [-24+EBP]
+    45 0000005F 74 2D                           	JE	L22
+    46 00000061                                 L13:
+    47 00000061 88 16                           	MOV	BYTE [ESI],DL
+    48 00000063 43                              	INC	EBX
+    49 00000064 FF 45 F0                        	INC	DWORD [-16+EBP]
+    50 00000067 46                              	INC	ESI
+    51 00000068 39 4D F0                        	CMP	DWORD [-16+EBP],ECX
+    52 0000006B 7E E8                           	JLE	L15
+    53 0000006D                                 L20:
+    54 0000006D 01 CF                           	ADD	EDI,ECX
+    55 0000006F 01 4D E0                        	ADD	DWORD [-32+EBP],ECX
+    56 00000072 FF 4D EC                        	DEC	DWORD [-20+EBP]
+    57 00000075 79 C4                           	JNS	L16
+    58 00000077 6A 15                           	PUSH	21
+    59 00000079 51                              	PUSH	ECX
+    60 0000007A 6A 03                           	PUSH	3
+    61 0000007C 6A 03                           	PUSH	3
+    62 0000007E FF 75 08                        	PUSH	DWORD [8+EBP]
+    63 00000081 E8 [00000000]                   	CALL	_sheet_refresh
+    64 00000086 8D 65 F4                        	LEA	ESP,DWORD [-12+EBP]
+    65 00000089 5B                              	POP	EBX
+    66 0000008A 5E                              	POP	ESI
+    67 0000008B 5F                              	POP	EDI
+    68 0000008C 5D                              	POP	EBP
+    69 0000008D C3                              	RET
+    70 0000008E                                 L22:
+    71 0000008E 8A 55 EA                        	MOV	DL,BYTE [-22+EBP]
+    72 00000091 EB CE                           	JMP	L13
+    73 00000093                                 L21:
+    74 00000093 8D 41 EA                        	LEA	EAX,DWORD [-22+ECX]
+    75 00000096 39 45 F0                        	CMP	DWORD [-16+EBP],EAX
+    76 00000099 7F C1                           	JG	L12
+    77 0000009B 8A 55 EB                        	MOV	DL,BYTE [-21+EBP]
+    78 0000009E EB C1                           	JMP	L13
+    79 000000A0                                 L2:
+    80 000000A0 C6 45 EB 08                     	MOV	BYTE [-21+EBP],8
+    81 000000A4 C6 45 EA 0F                     	MOV	BYTE [-22+EBP],15
+    82 000000A8 C6 45 E9 07                     	MOV	BYTE [-23+EBP],7
+    83 000000AC C6 45 E8 0B                     	MOV	BYTE [-24+EBP],11
+    84 000000B0 E9 FFFFFF79                     	JMP	L3
